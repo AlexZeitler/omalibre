@@ -1,0 +1,61 @@
+# Builds a downloadable binary whenever a version tag is pushed.
+#
+# The target is musl rather than glibc, so the result is statically linked and
+# runs on any x86_64 Linux regardless of how old its C library is. That matters
+# because the runner's distribution is not the one people read on.
+#
+# No C toolchain is installed: the reader depends on Rust code only, so rust-lld
+# links it. Anything that needed musl-gcc here would also need a compiler on the
+# machines of people building from source.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: x86_64-unknown-linux-musl
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: rust-lld
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the musl target
+        run: rustup target add "$TARGET"
+
+      - name: Run the tests
+        run: cargo test --target "$TARGET"
+
+      - name: Build
+        run: cargo build --release --target "$TARGET"
+
+      - name: Package
+        run: |
+          binary="target/$TARGET/release/omalibre"
+          strip "$binary"
+          # Refuse to ship something that pulls in libraries at startup. The
+          # loader is asked rather than file(1), which calls the same binary
+          # "static-pie linked" and would not match.
+          ldd "$binary" 2>&1 | grep -q "statically linked"
+          # The name carries no version, so that the download URL under
+          # releases/latest stays the same and can be written down once.
+          archive="omalibre-x86_64-linux.tar.gz"
+          tar czf "$archive" -C "target/$TARGET/release" omalibre
+          sha256sum "$archive" > "$archive.sha256"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            omalibre-*.tar.gz omalibre-*.tar.gz.sha256
