@@ -104,6 +104,10 @@ pub struct App {
     /// What has been typed into the search prompt so far.
     search_input: String,
     pub pending_edit: Option<EditRequest>,
+    /// Live Markdown mirror directory (Obsidian). None disables the mirror.
+    notes_dir: Option<std::path::PathBuf>,
+    /// Book metadata for vault front matter. Filled when notes_dir is set.
+    book_record: Option<crate::journal::BookRecord>,
 }
 
 impl App {
@@ -123,6 +127,7 @@ impl App {
             .and_then(|locator| book.spine.iter().position(|item| item.href == locator.href))
             .unwrap_or(0);
         let chapter = load_chapter(&mut book, chapter_index);
+        let book_record = state.book(&id).cloned();
 
         Ok(Self {
             book,
@@ -156,7 +161,14 @@ impl App {
             pending_cursor: None,
             search_input: String::new(),
             pending_edit: None,
+            notes_dir: None,
+            book_record,
         })
+    }
+
+    /// Enables the live Markdown annotation mirror under this directory.
+    pub fn set_notes_dir(&mut self, dir: Option<std::path::PathBuf>) {
+        self.notes_dir = dir;
     }
 
     /// Tells the reader how this terminal draws pictures. Set once at startup,
@@ -1062,12 +1074,26 @@ impl App {
             self.status = Some(format!("highlighted in {}", color.label()));
         }
         self.invalidate_layout();
+        self.mirror_notes();
     }
 
     /// Marks the layout as stale. Needed whenever annotations change, because
     /// comments are laid out as lines of their own.
     fn invalidate_layout(&mut self) {
         self.laid_out_for = 0;
+    }
+
+    /// Rewrites this book's Markdown notes file when `notes_dir` is configured.
+    fn mirror_notes(&mut self) {
+        let Some(dir) = self.notes_dir.as_ref() else {
+            return;
+        };
+        let record = self.book_record.clone().unwrap_or_else(|| {
+            crate::journal::BookRecord::new(std::path::PathBuf::new())
+        });
+        if let Err(err) = crate::vault::write_book(dir, &self.id, &record, &self.annotations) {
+            self.status = Some(format!("notes mirror failed: {err:#}"));
+        }
     }
 
     /// Shows a message in the status line.
@@ -1096,6 +1122,7 @@ impl App {
             };
         }
         self.invalidate_layout();
+        self.mirror_notes();
         self.status = Some("comment saved".into());
     }
 
@@ -1208,6 +1235,7 @@ impl App {
             existing.note = None;
         }
         self.invalidate_layout();
+        self.mirror_notes();
         self.status = Some("comment removed, annotation kept".into());
     }
 
@@ -1264,6 +1292,7 @@ impl App {
         }
         self.annotations.retain(|a| a.id != id);
         self.invalidate_layout();
+        self.mirror_notes();
         if self.annotations.is_empty() && self.mode == Mode::Annotations {
             self.mode = Mode::Reading;
         } else if !self.annotations.is_empty() {
@@ -1287,6 +1316,7 @@ impl App {
             existing.color = color;
         }
         self.invalidate_layout();
+        self.mirror_notes();
         self.status = Some(format!("recoloured to {}", color.label()));
     }
 

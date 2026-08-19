@@ -17,6 +17,7 @@ mod search;
 mod shelf;
 mod theme;
 mod ui;
+mod vault;
 
 use anyhow::{Context, Result};
 use app::App;
@@ -95,6 +96,10 @@ struct Cli {
     /// With --open: jump to the first occurrence of this text.
     #[arg(long, value_name = "TEXT")]
     at: Option<String>,
+
+    /// Rewrite annotation Markdown under notes_dir from the journal and exit.
+    #[arg(long)]
+    sync_notes: bool,
 }
 
 fn main() -> Result<()> {
@@ -106,6 +111,9 @@ fn main() -> Result<()> {
     }
     if cli.list {
         return list_library();
+    }
+    if cli.sync_notes {
+        return sync_notes();
     }
     if let Some(dir) = &cli.export {
         return export_library(dir, cli.force, cli.reindex, cli.embed);
@@ -224,6 +232,7 @@ fn browse() -> Result<()> {
                 max_width: config.max_width.unwrap_or(u16::MAX),
             };
             let mut app = App::new(book, id, journal, &state, options)?;
+            app.set_notes_dir(config.notes_dir());
             app.set_image_backend(backend, cell);
 
             repaint_everything(&mut terminal)?;
@@ -290,6 +299,7 @@ fn find_and_open(query: &str) -> Result<()> {
             max_width: config.max_width.unwrap_or(u16::MAX),
         };
         let mut app = App::new(book, id, journal, &state, options)?;
+        app.set_notes_dir(config.notes_dir());
         app.set_image_backend(backend, cell);
         if let Some(href) = &hit.chapter_href {
             app.go_to_href(href);
@@ -558,6 +568,26 @@ fn scan_directory(dir: &PathBuf) -> Result<()> {
 }
 
 /// Prints the library.
+/// Rewrites every book's annotation Markdown under `notes_dir`.
+fn sync_notes() -> Result<()> {
+    first_start()?;
+    let config = paths::Config::load()?;
+    let Some(notes_dir) = config.notes_dir() else {
+        anyhow::bail!(
+            "notes_dir is not set. Add it to {} first, for example:\n  notes_dir = \"~/Obsidian/Vault/Books\"",
+            paths::config_file()?.display()
+        );
+    };
+    let state = Journal::replay(&config.journal_dir()?)?;
+    let written = vault::sync_all(&notes_dir, &state)?;
+    println!(
+        "wrote {written} note file{} to {}",
+        if written == 1 { "" } else { "s" },
+        notes_dir.display()
+    );
+    Ok(())
+}
+
 fn list_library() -> Result<()> {
     let config = paths::Config::load()?;
     let state = Journal::replay(&config.journal_dir()?)?;
@@ -633,6 +663,7 @@ fn run_at(
         max_width: config.max_width.unwrap_or(u16::MAX),
     };
     let mut app = App::new(book, id, journal, &state, options)?;
+    app.set_notes_dir(config.notes_dir());
     if let Some(chapter) = chapter {
         app.go_to_href(&chapter);
     }
@@ -819,6 +850,18 @@ fn with_suspended_terminal<T>(
     outcome
 }
 
+/// Builds a command from `$EDITOR` / `$VISUAL`, which may include arguments.
+///
+/// Omarchy sets `EDITOR=omarchy-launch-editor --inline`. `Command::new` takes a
+/// program path, not a shell line, so the flags must be split off first.
+fn editor_command(spec: &str) -> std::process::Command {
+    let mut parts = spec.split_whitespace();
+    let program = parts.next().filter(|p| !p.is_empty()).unwrap_or("vi");
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(parts);
+    cmd
+}
+
 /// Opens `$EDITOR` on a temporary file and returns what was written.
 ///
 /// The quoted passage is put below a marker line as a reminder of what the
@@ -839,7 +882,7 @@ fn edit_note(request: &app::EditRequest) -> Result<String> {
     // The existing comment goes first so the cursor lands on it.
     std::fs::write(&path, scaffold)?;
 
-    let status = std::process::Command::new(&editor)
+    let status = editor_command(&editor)
         .arg(&path)
         .status()
         .with_context(|| format!("cannot run {editor}"))?;

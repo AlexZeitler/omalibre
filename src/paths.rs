@@ -21,6 +21,9 @@ const APP: &str = "omalibre";
 pub struct Config {
     /// Directory holding the journal files. One file per machine.
     pub journal_dir: Option<PathBuf>,
+    /// Directory for live Markdown annotation notes (Obsidian vault folder).
+    /// When set, every highlight and comment is mirrored as one `.md` per book.
+    pub notes_dir: Option<PathBuf>,
     /// Maximum reading width in columns. `None` uses the full window.
     pub max_width: Option<u16>,
     /// How to draw pictures: `kitty`, `sixel` or `half-blocks`. `None` asks the
@@ -58,6 +61,12 @@ impl Config {
              # only its own file, so no conflict can arise.\n\
              # journal_dir = \"{}\"\n\
              \n\
+             # Live Markdown mirror of highlights and notes. Point this at a\n\
+             # folder inside an Obsidian vault. One file per book is rewritten\n\
+             # whenever an annotation changes. Leave unset to keep notes only\n\
+             # in the journal.\n\
+             # notes_dir = \"~/Obsidian/Vault/Books\"\n\
+             \n\
              # Reading width in columns. Comment out to use the full window.\n\
              # max_width = 66\n\
              \n\
@@ -77,6 +86,11 @@ impl Config {
             Some(dir) => Ok(expand_tilde(dir)),
             None => Ok(data_dir()?.join("journal")),
         }
+    }
+
+    /// Folder for live annotation Markdown, when configured.
+    pub fn notes_dir(&self) -> Option<PathBuf> {
+        self.notes_dir.as_ref().map(expand_tilde)
     }
 }
 
@@ -140,9 +154,13 @@ mod tests {
 
     #[test]
     fn reads_settings_from_toml() {
-        let config: Config = toml::from_str("max_width = 72\njournal_dir = \"~/box\"\n").unwrap();
+        let config: Config = toml::from_str(
+            "max_width = 72\njournal_dir = \"~/box\"\nnotes_dir = \"~/vault/Books\"\n",
+        )
+        .unwrap();
         assert_eq!(config.max_width, Some(72));
         assert_eq!(config.journal_dir, Some(PathBuf::from("~/box")));
+        assert_eq!(config.notes_dir, Some(PathBuf::from("~/vault/Books")));
     }
 
     #[test]
@@ -150,5 +168,6 @@ mod tests {
         let config: Config = toml::from_str("").unwrap();
         assert_eq!(config.max_width, None);
         assert_eq!(config.journal_dir, None);
+        assert_eq!(config.notes_dir, None);
     }
 }
