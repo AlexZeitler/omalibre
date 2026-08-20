@@ -248,9 +248,52 @@ bar widget asks.
 
 Scanning again is cheap and never overwrites anything you corrected by hand.
 
+## What it needs, and what it writes
+
+The bar widget is one QML file plus a shell script, running inside
+`omarchy-shell`. It links against nothing. It calls `omalibre` for its rows,
+`omarchy-launch-tui` to open a book, and, only when you press the install
+button, `curl` and `tar`. The book icon wants a Nerd Font, which the Omarchy
+bar already uses. The reader is a statically linked binary and needs nothing at
+all at runtime. [qmd](https://github.com/tobi/qmd) is optional and only for
+search by meaning.
+
+The widget writes nothing of yours. The install button downloads into
+`~/.local/bin`, and only on that press.
+
+On its first start the reader writes two files and overwrites neither, so a
+file you edited or linked yourself stays as it is:
+
+- `~/.config/omalibre/config.toml`, the commented settings file
+- `~/.config/omarchy/themed/omalibre.toml.tpl`, the colour template, and only
+  where Omarchy is installed
+
+Where it did place that template, it applies your current theme once more so
+the colours render straight away. That re-runs the theme you already have; it
+changes neither your choice nor your background.
+
+## Removing it
+
+```bash
+omarchy plugin remove alexzeitler.omalibre
+```
+
+That takes the widget off the bar and deletes the clone. The reader is one
+file, so `rm ~/.local/bin/omalibre`, or `cargo uninstall omalibre` if you
+installed it that way.
+
+What you wrote stays behind until you say otherwise. Mind the first line: the
+journal holds every reading position and every note you took.
+
+```bash
+rm -rf ~/.local/share/omalibre                   # journal and read model
+rm -rf ~/.config/omalibre                        # settings
+rm ~/.config/omarchy/themed/omalibre.toml.tpl    # colour template
+```
+
 ## License
 
-MIT.
+MIT, in `LICENSE` and in the plugin's `manifest.json`.
 
 ## Not there yet
 
