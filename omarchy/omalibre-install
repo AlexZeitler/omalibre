@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Fetches the released binary into ~/.local/bin, but only once the release
+# signature checks out against the key shipped beside this script.
+#
+# The download URL under releases/latest is mutable on purpose: it always
+# points at the newest release, so what arrives here can change without the
+# plugin changing. That is what the signature answers. The public key travels
+# inside the plugin and through the same review the plugin gets, so it is the
+# one piece of this path a rewritten release cannot reach.
+#
+# gpgv rather than `gpg --verify`: it checks against exactly the keyring handed
+# to it and never touches the keyring of the person installing.
+#
+# Nothing is piped into tar. Verifying needs the whole file on disk first, and
+# a pipe would have unpacked half of it before anyone asked where it came from.
+
+set -euo pipefail
+
+readonly archive="omalibre-x86_64-linux.tar.gz"
+readonly base="https://github.com/AlexZeitler/omalibre/releases/latest/download"
+readonly target="$HOME/.local/bin"
+readonly key="$(dirname "$(readlink -f "$0")")/omalibre-releases.asc"
+
+# The panel runs this in a terminal that closes the moment the script ends. A
+# failed signature would flash past unread, which is the one message here that
+# has to be seen.
+abort() {
+  echo >&2
+  echo "$1" >&2
+  echo "Nothing was installed." >&2
+  echo >&2
+  read -r -n 1 -s -p "Press any key to close."
+  echo >&2
+  exit 1
+}
+
+[[ -r "$key" ]] || abort "Missing the release key: $key"
+for tool in curl gpg gpgv tar; do
+  command -v "$tool" >/dev/null 2>&1 || abort "$tool is not installed."
+done
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+cd "$work"
+
+echo "Downloading Omalibre"
+curl -fL --progress-bar --proto '=https' --tlsv1.2 -O "$base/$archive" \
+  || abort "Download failed."
+curl -fL --progress-bar --proto '=https' --tlsv1.2 -O "$base/$archive.asc" \
+  || abort "Could not download the signature."
+
+echo "Checking the signature"
+gpg --dearmor < "$key" > "$work/keyring.gpg" \
+  || abort "Could not read the release key."
+gpgv --keyring "$work/keyring.gpg" "$archive.asc" "$archive" \
+  || abort "The signature does not match. This download is not the release it claims to be."
+
+mkdir -p "$target"
+tar xzf "$archive" -C "$target"
+
+echo
+echo "Done. Point omalibre at your books with: omalibre --scan ~/Books"

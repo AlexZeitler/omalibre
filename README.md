@@ -21,13 +21,18 @@ omarchy plugin add https://github.com/AlexZeitler/omalibre.git --enable
 That puts a book icon in your bar. Open it and it offers to fetch Omalibre if
 it is not there yet. See [In the Omarchy bar](#in-the-omarchy-bar).
 
-Anywhere else, download it. One file, nothing else needed:
+Without the plugin, download it. One file, nothing else needed:
 
 ```bash
 mkdir -p ~/.local/bin
 curl -fL https://github.com/AlexZeitler/omalibre/releases/latest/download/omalibre-x86_64-linux.tar.gz \
   | tar xz -C ~/.local/bin
 ```
+
+The plugin does not take this route. It checks the release signature before it
+unpacks anything, which is what `releases/latest` needs: the URL always points
+at the newest release, so what arrives can change without this page changing.
+To do the same by hand, see [Verifying a release](#verifying-a-release).
 
 That is a 64-bit Linux build with no dependencies at all, so the age of your
 distribution does not matter. If your shell cannot find `omalibre` afterwards,
@@ -56,6 +61,33 @@ Elsewhere it uses built-in colours.
 
 Working from a clone, `./install-theme.sh` links the colour template instead of
 copying it, so `git pull` keeps it current.
+
+### Verifying a release
+
+Every release is signed. The public key is not published beside the release,
+where a rewritten release could replace it, but shipped inside the plugin at
+`omarchy/omalibre-releases.asc`:
+
+```
+E064 746F EC7E CFB6 695D  629B F626 526A D10C 2854
+```
+
+The plugin runs this check for you. By hand it is:
+
+```bash
+cd "$(mktemp -d)"
+base=https://github.com/AlexZeitler/omalibre/releases/latest/download
+curl -fL -O "$base/omalibre-x86_64-linux.tar.gz"
+curl -fL -O "$base/omalibre-x86_64-linux.tar.gz.asc"
+curl -fL -O https://raw.githubusercontent.com/AlexZeitler/omalibre/master/omarchy/omalibre-releases.asc
+
+gpg --dearmor < omalibre-releases.asc > release-key.gpg
+gpgv --keyring "$PWD/release-key.gpg" \
+  omalibre-x86_64-linux.tar.gz.asc omalibre-x86_64-linux.tar.gz
+```
+
+`gpgv` says `Good signature` or it fails. It reads only the keyring given to
+it and leaves your own alone.
 
 ## In the Omarchy bar
 
@@ -250,16 +282,18 @@ Scanning again is cheap and never overwrites anything you corrected by hand.
 
 ## What it needs, and what it writes
 
-The bar widget is one QML file plus a shell script, running inside
-`omarchy-shell`. It links against nothing. It calls `omalibre` for its rows,
-`omarchy-launch-tui` to open a book, and, only when you press the install
-button, `curl` and `tar`. The book icon wants a Nerd Font, which the Omarchy
-bar already uses. The reader is a statically linked binary and needs nothing at
+The bar widget is one QML file plus two shell scripts and a public key,
+running inside `omarchy-shell`. It links against nothing. It calls `omalibre`
+for its rows, `omarchy-launch-tui` to open a book, and, only when you press the
+install button, `curl`, `gpg`, `gpgv` and `tar`. GnuPG is already there: pacman
+itself depends on it. The book icon wants a Nerd Font, which the Omarchy bar
+already uses. The reader is a statically linked binary and needs nothing at
 all at runtime. [qmd](https://github.com/tobi/qmd) is optional and only for
 search by meaning.
 
 The widget writes nothing of yours. The install button downloads into
-`~/.local/bin`, and only on that press.
+`~/.local/bin`, and only on that press, and only after the release signature
+checks out. See [Verifying a release](#verifying-a-release).
 
 On its first start the reader writes two files and overwrites neither, so a
 file you edited or linked yourself stays as it is:

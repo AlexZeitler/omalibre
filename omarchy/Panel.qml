@@ -44,12 +44,10 @@ Panel {
   // calling the binary: it knows the three places omalibre can live.
   readonly property string runner: pathFromUrl(Qt.resolvedUrl("omalibre-run"))
 
-  readonly property string downloadCommand:
-    'set -e; mkdir -p "$HOME/.local/bin"; ' +
-    'echo "Downloading Omalibre into ~/.local/bin"; ' +
-    'curl -fL https://github.com/AlexZeitler/omalibre/releases/latest/download/omalibre-x86_64-linux.tar.gz ' +
-    '| tar xz -C "$HOME/.local/bin"; ' +
-    'echo; echo "Done. Point omalibre at your books with: omalibre --scan ~/Books"'
+  // The download goes through a script for the same reason the runner does:
+  // it verifies the release signature before anything is unpacked, and that is
+  // more shell than belongs in a QML string.
+  readonly property string installer: pathFromUrl(Qt.resolvedUrl("omalibre-install"))
 
   readonly property int recentCount: 5
   readonly property int matchCount: 8
@@ -207,7 +205,7 @@ Panel {
   Process {
     id: installProcess
     command: ["omarchy-launch-tui", "--app-id=org.omarchy.omalibre-install",
-      "bash", "-c", root.downloadCommand]
+      root.installer]
   }
 
   WidgetButton {

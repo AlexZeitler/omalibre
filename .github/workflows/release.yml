@@ -51,6 +51,28 @@ jobs:
           tar czf "$archive" -C "target/$TARGET/release" omalibre
           sha256sum "$archive" > "$archive.sha256"
 
+      - name: Sign
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          archive="omalibre-x86_64-linux.tar.gz"
+          # A throwaway home, so no key material outlives the step.
+          GNUPGHOME="$(mktemp -d)"
+          export GNUPGHOME
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$GPG_SIGNING_KEY" | gpg --batch --quiet --import
+          # Loopback pinentry: there is no terminal here to type a passphrase into.
+          printf '%s' "$GPG_PASSPHRASE" | gpg --batch --quiet \
+            --pinentry-mode loopback --passphrase-fd 0 \
+            --detach-sign --armor "$archive"
+          # Verify against the key the plugin ships, not against the one just
+          # imported. That is the check nobody would run by hand: it fails the
+          # release if the signing key and the key users hold have drifted apart.
+          gpg --dearmor < omarchy/omalibre-releases.asc > "$GNUPGHOME/plugin-key.gpg"
+          gpgv --keyring "$GNUPGHOME/plugin-key.gpg" "$archive.asc" "$archive"
+          gpgconf --kill all
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,4 +80,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            omalibre-*.tar.gz omalibre-*.tar.gz.sha256
+            omalibre-*.tar.gz omalibre-*.tar.gz.sha256 omalibre-*.tar.gz.asc
