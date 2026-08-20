@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "alexzeitler.omalibre",
+  "name": "Omalibre",
+  "version": "0.1.0",
+  "author": "Alexander Zeitler",
+  "license": "MIT",
+  "description": "The books you read last, one click from reading on.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "omarchy/Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Omalibre",
+    "description": "The five books you read last, and a way back into them.",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

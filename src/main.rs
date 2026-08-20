@@ -59,6 +59,18 @@ struct Cli {
     #[arg(long)]
     list: bool,
 
+    /// Print the books read most recently as JSON and exit. Default five.
+    #[arg(long, value_name = "N", num_args = 0..=1, default_missing_value = "5")]
+    recent: Option<usize>,
+
+    /// With --list: print JSON rather than a table.
+    #[arg(long)]
+    json: bool,
+
+    /// With --list: only books whose title, author, series or tags match.
+    #[arg(long, value_name = "TEXT")]
+    filter: Option<String>,
+
     /// Write the library as Markdown for a search engine to index.
     #[arg(long, value_name = "DIR", num_args = 0..=1, default_missing_value = "")]
     export: Option<String>,
@@ -105,7 +117,10 @@ fn main() -> Result<()> {
         return scan_directory(dir);
     }
     if cli.list {
-        return list_library();
+        return list_library(cli.json, cli.filter.as_deref().unwrap_or(""));
+    }
+    if let Some(count) = cli.recent {
+        return list_recent(count);
     }
     if let Some(dir) = &cli.export {
         return export_library(dir, cli.force, cli.reindex, cli.embed);
@@ -558,18 +573,31 @@ fn scan_directory(dir: &PathBuf) -> Result<()> {
 }
 
 /// Prints the library.
-fn list_library() -> Result<()> {
+fn list_library(as_json: bool, needle: &str) -> Result<()> {
     let config = paths::Config::load()?;
     let state = Journal::replay(&config.journal_dir()?)?;
     let mut entries = library::entries(&state);
+    library::sort(&mut entries, library::Order::Title);
+    let entries = library::filter(&entries, needle);
+
+    if as_json {
+        return print_books(&entries);
+    }
     if entries.is_empty() {
-        println!("The library is empty. Read one in with:");
-        println!("  omalibre --scan ~/path/to/books");
+        if needle.trim().is_empty() {
+            println!("The library is empty. Read one in with:");
+            println!("  omalibre --scan ~/path/to/books");
+        } else {
+            println!("No book matches {needle}.");
+        }
         return Ok(());
     }
-    library::sort(&mut entries, library::Order::Title);
 
-    println!("{} books\n", entries.len());
+    if needle.trim().is_empty() {
+        println!("{} books\n", entries.len());
+    } else {
+        println!("{} books matching {needle}\n", entries.len());
+    }
     for entry in &entries {
         let record = &entry.record;
         let series = match (&record.series, record.series_index) {
@@ -584,6 +612,46 @@ fn list_library() -> Result<()> {
             truncate(&record.display_authors(), 26)
         );
     }
+    Ok(())
+}
+
+/// Prints the books read most recently, as JSON.
+///
+/// `--list` draws a table for a person. This prints the same library for a
+/// program: the Omarchy bar widget draws the rows and hands an id straight back
+/// to `--open` when someone picks one. A book that was never opened carries no
+/// timestamp and is left out, because recent means read, not owned.
+fn list_recent(count: usize) -> Result<()> {
+    let config = paths::Config::load()?;
+    let state = Journal::replay(&config.journal_dir()?)?;
+    let mut entries = library::entries(&state);
+    entries.retain(|entry| entry.last_read.is_some());
+    library::sort(&mut entries, library::Order::Recent);
+    entries.truncate(count);
+
+    print_books(&entries)
+}
+
+/// Writes books as JSON, one object each, for a program to read.
+fn print_books(entries: &[library::Entry]) -> Result<()> {
+    let books: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|entry| {
+            serde_json::json!({
+                "id": entry.id.to_string(),
+                "title": entry.record.display_title(),
+                "authors": entry.record.authors,
+                // Seconds, not nanoseconds: the bar widget parses this with
+                // JavaScript's Date, which reads at most milliseconds.
+                "lastRead": entry
+                    .last_read
+                    .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                "missing": entry.record.missing,
+            })
+        })
+        .collect();
+
+    println!("{}", serde_json::to_string_pretty(&books)?);
     Ok(())
 }
 

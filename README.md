@@ -1,4 +1,4 @@
-# omalibre
+# Omalibre
 
 **The AI native bookshelf for Omarchy**
 
@@ -12,7 +12,16 @@ search the whole library by meaning once you add [qmd](https://github.com/tobi/q
 
 ## Install
 
-Download it. One file, nothing else needed:
+On Omarchy, add the plugin and let the bar do the rest:
+
+```bash
+omarchy plugin add https://github.com/AlexZeitler/omalibre.git --enable
+```
+
+That puts a book icon in your bar. Open it and it offers to fetch Omalibre if
+it is not there yet. See [In the Omarchy bar](#in-the-omarchy-bar).
+
+Anywhere else, download it. One file, nothing else needed:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -41,16 +50,48 @@ mise reshim                  # only if you installed Rust with mise
 
 This puts `omalibre` in `~/.cargo/bin`.
 
-On Omarchy there is nothing else to do. The first start hooks omalibre into your
+On Omarchy there is nothing else to do. The first start hooks Omalibre into your
 theme, and from then on it follows every theme you switch to, while you read.
 Elsewhere it uses built-in colours.
 
 Working from a clone, `./install-theme.sh` links the colour template instead of
 copying it, so `git pull` keeps it current.
 
+## In the Omarchy bar
+
+The plugin puts your reading one click away:
+
+```bash
+omarchy plugin add https://github.com/AlexZeitler/omalibre.git --enable
+```
+
+That puts a book icon in your bar. Is Omalibre not installed yet, the panel
+says so and fetches it for you.
+
+![The panel offering to install Omalibre](docs/screenshots/bar-install.png)
+
+From then on the panel lists the five books you read last, newest first, with
+the author and when you last had them open. Type in the box to search the whole
+library by title, author, series or tag. Click a book and it opens in a
+terminal, at the page and line where you stopped.
+
+![The books read last, in the bar](docs/screenshots/bar.png)
+
+The box has the keyboard from the start. Arrow keys walk the list, `Enter`
+opens the book under the cursor, `Escape` closes the panel.
+
+`Library` at the top opens the reader on the library itself, for when the book
+you want is not among the five and you would rather browse than type.
+
+Move the icon where you want it:
+
+```bash
+omarchy bar move alexzeitler.omalibre --section left
+```
+
 ## Start reading
 
-Point omalibre at your books once:
+Point Omalibre at your books once:
 
 ```bash
 omalibre --scan ~/Books
@@ -141,7 +182,7 @@ omalibre --export --reindex --embed
 Diagrams and screenshots appear in the text. How sharp they are depends on your
 terminal: Ghostty and kitty show them pixel-perfect, foot nearly so, and
 everything else falls back to coloured blocks, which is coarse but always works.
-omalibre asks your terminal at startup and picks the best it can do.
+Omalibre asks your terminal at startup and picks the best it can do.
 
 ![A diagram in the text](docs/screenshots/image.png)
 
@@ -181,7 +222,7 @@ images = "sixel"
 
 ## Ask Claude about your books
 
-omalibre can hand your library to Claude, including the notes you wrote:
+Omalibre can hand your library to Claude, including the notes you wrote:
 
 ```bash
 claude mcp add omalibre --scope user -- omalibre --mcp
@@ -189,7 +230,7 @@ claude mcp add omalibre --scope user -- omalibre --mcp
 
 Then you can ask things like "what did I highlight in the Kamal Handbook", "where
 did I stop in which book", or "find where this book explains snapshots". Claude
-reads the library through omalibre, so what it sees is always current.
+reads the library through Omalibre, so what it sees is always current.
 
 Bear in mind that chapter text sent this way leaves your machine.
 
@@ -198,7 +239,12 @@ Bear in mind that chapter text sent this way leaves your machine.
 ```bash
 omalibre --scan ~/Books      # add new books, notice moved ones
 omalibre --list              # the library on the command line
+omalibre --list --filter pg  # only the books that match
+omalibre --recent            # the five you read last
 ```
+
+Add `--json` to `--list`, and `--recent` prints JSON anyway: that is how the
+bar widget asks.
 
 Scanning again is cheap and never overwrites anything you corrected by hand.
 

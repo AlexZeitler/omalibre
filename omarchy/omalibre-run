@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Finds omalibre and runs it with whatever arguments follow.
+#
+# The release download puts the binary in ~/.local/bin, cargo install in
+# ~/.cargo/bin, and the shell that runs this is started by the compositor
+# rather than by a login shell, so it inherits neither reliably. Look in both,
+# and let PATH win when it does know the program.
+#
+# Two callers share this: the panel, which reads JSON from stdout, and the row
+# click, which starts the reader in a terminal. One place to look means one
+# place to fix.
+#
+#   omalibre-run <args...>       run omalibre; print NOT_INSTALLED when absent
+
+set -uo pipefail
+
+locate_binary() {
+  if command -v omalibre >/dev/null 2>&1; then
+    command -v omalibre
+  elif [[ -x "$HOME/.local/bin/omalibre" ]]; then
+    echo "$HOME/.local/bin/omalibre"
+  elif [[ -x "$HOME/.cargo/bin/omalibre" ]]; then
+    echo "$HOME/.cargo/bin/omalibre"
+  else
+    return 1
+  fi
+}
+
+if ! binary=$(locate_binary); then
+  # Not an error exit: the widget reads this marker off stdout and offers to
+  # install. An exit code would race with the output it belongs to.
+  echo NOT_INSTALLED
+  exit 0
+fi
+
+exec "$binary" "$@"
