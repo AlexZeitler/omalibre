@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "alexzeitler.omalibre",
   "name": "Omalibre",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Alexander Zeitler",
   "license": "MIT",
   "description": "The books you read last, one click from reading on.",
