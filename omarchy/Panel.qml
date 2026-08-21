@@ -23,6 +23,12 @@ Panel {
   property string failure: ""
   property int cursor: 0
 
+  // What the update check last answered. Empty until it has run, and empty
+  // again on a machine that cannot reach GitHub.
+  property string installedVersion: ""
+  property string latestVersion: ""
+  property bool updateAvailable: false
+
   // Three queries, because typing outruns the process that answers it: what was
   // typed last, what is being answered right now, and whether another run is owed.
   property string wantedQuery: ""
@@ -48,6 +54,11 @@ Panel {
   // it verifies the release signature before anything is unpacked, and that is
   // more shell than belongs in a QML string.
   readonly property string installer: pathFromUrl(Qt.resolvedUrl("omalibre-install"))
+
+  // Comparing versions is shell work, not panel work: it reads the release tag
+  // off a redirect and orders two version numbers. The panel only draws the
+  // answer.
+  readonly property string updateChecker: pathFromUrl(Qt.resolvedUrl("omalibre-update-check"))
 
   readonly property int recentCount: 5
   readonly property int matchCount: 8
@@ -134,6 +145,25 @@ Panel {
     root.close()
   }
 
+  // Asks GitHub over the network, so never in the way of the list: the panel
+  // draws its books first and the update line appears whenever the answer
+  // arrives, or never.
+  function checkForUpdate() {
+    if (updateProcess.running) return
+    updateProcess.running = true
+  }
+
+  function takeUpdate(raw) {
+    try {
+      var parsed = JSON.parse((raw || "").trim())
+      root.installedVersion = parsed.installed || ""
+      root.latestVersion = parsed.latest || ""
+      root.updateAvailable = parsed.update === true
+    } catch (error) {
+      root.updateAvailable = false
+    }
+  }
+
   function moveCursor(delta) {
     if (root.shownBooks.length === 0) return
     root.cursor = Math.max(0, Math.min(root.shownBooks.length - 1, root.cursor + delta))
@@ -174,6 +204,7 @@ Panel {
       root.cursor = 0
       searchField.text = ""
       root.requestBooks("")
+      root.checkForUpdate()
     }
   }
 
@@ -200,6 +231,15 @@ Panel {
 
   Process {
     id: openProcess
+  }
+
+  Process {
+    id: updateProcess
+    command: [root.updateChecker]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.takeUpdate(text)
+    }
   }
 
   Process {
@@ -286,6 +326,38 @@ Panel {
           }
         }
 
+        // A newer release is out. The button goes through the same script the
+        // first install goes through: it fetches releases/latest, checks the
+        // signature and unpacks over what is there.
+        RowLayout {
+          visible: root.updateAvailable && !root.notInstalled
+          Layout.fillWidth: true
+          spacing: Style.space(8)
+
+          Text {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            text: "Version " + root.latestVersion + " is out. You have "
+              + root.installedVersion + "."
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
+
+          Button {
+            text: "Update"
+            foreground: root.fg
+            active: true
+            tooltipText: "Fetch and verify " + root.latestVersion
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY
+            onClicked: root.install()
+          }
+        }
+
         // The cursor keys belong to the list even while the box has focus, so
         // one can type a few letters and walk down to the book without reaching
         // for the mouse.
@@ -315,6 +387,7 @@ Panel {
           Layout.fillWidth: true
           foreground: root.fg
         }
+
 
         // omalibre is not on this machine. The bar can fetch it, which is the
         // whole point of shipping the widget with the reader.

@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# Answers one question for the panel: is a newer release out than the binary
+# on this machine?
+#
+# The version of the newest release comes from the redirect, not from the API.
+# `releases/latest` answers with a Location that carries the tag, so reading it
+# needs no JSON, no jq and no API budget. The API allows sixty calls an hour
+# per address, and a panel that opens all day would spend them on this.
+#
+# Nothing here fails loudly. A machine without a network still has to show its
+# books, so an unreachable GitHub means `latest` is null and the panel simply
+# says nothing about updates.
+#
+#   omalibre-update-check    {"installed":"0.1.1","latest":"0.1.2","update":true}
+
+set -uo pipefail
+
+readonly latest_url="https://github.com/AlexZeitler/omalibre/releases/latest"
+readonly runner="$(dirname "$(readlink -f "$0")")/omalibre-run"
+
+# Both versions end up inside JSON that the panel parses and prints. A tag is
+# whatever the repository was tagged with, so let only what a version can hold
+# through and drop the rest.
+sane() {
+  [[ "$1" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]]
+}
+
+quoted() {
+  if [[ -n "$1" ]]; then printf '"%s"' "$1"; else printf 'null'; fi
+}
+
+# `omalibre --version` prints "omalibre 0.1.1". The runner prints NOT_INSTALLED
+# instead when the binary is nowhere on disk, and asking it rather than the
+# PATH means this reads the very copy the panel would start.
+installed=""
+if raw="$("$runner" --version 2>/dev/null)"; then
+  raw="${raw%%$'\n'*}"
+  [[ "$raw" != NOT_INSTALLED ]] && installed="${raw##* }"
+fi
+sane "$installed" || installed=""
+
+# The tag sits at the end of the URL the redirect lands on:
+# https://github.com/AlexZeitler/omalibre/releases/tag/v0.1.2
+latest=""
+if command -v curl >/dev/null 2>&1; then
+  if url="$(curl -fsSI -o /dev/null -w '%{url_effective}' -L --max-time 5 \
+      --proto '=https' --tlsv1.2 "$latest_url" 2>/dev/null)"; then
+    if [[ "$url" == */releases/tag/* ]]; then
+      latest="${url##*/}"
+      latest="${latest#v}"
+    fi
+  fi
+fi
+sane "$latest" || latest=""
+
+# sort -V rather than a text compare: 0.1.10 is the newer release, but sorts
+# before 0.1.9 as a string. Only a release that sorts above what is installed
+# counts, so a machine running a build ahead of the tag is left alone.
+update=false
+if [[ -n "$installed" && -n "$latest" && "$installed" != "$latest" ]]; then
+  newest="$(printf '%s\n%s\n' "$installed" "$latest" | sort -V | tail -1)"
+  [[ "$newest" == "$latest" ]] && update=true
+fi
+
+printf '{"installed":%s,"latest":%s,"update":%s}\n' \
+  "$(quoted "$installed")" "$(quoted "$latest")" "$update"

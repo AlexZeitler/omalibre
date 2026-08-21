@@ -115,6 +115,27 @@ opens the book under the cursor, `Escape` closes the panel.
 `Library` at the top opens the reader on the library itself, for when the book
 you want is not among the five and you would rather browse than type.
 
+Is a newer release out, the panel names both versions and offers `Update`.
+
+![A newer release, offered above the search box](docs/screenshots/bar-update.png)
+
+The update takes the same route the first install takes, so the signature is
+checked before anything is unpacked.
+
+![The release checked before it is unpacked](docs/screenshots/update-run.png)
+
+Which version is out the panel reads off the redirect behind `releases/latest`,
+which costs one request and no API budget. A machine that cannot reach GitHub
+says nothing about updates and lists your books as usual.
+
+`omarchy plugin update` is a different thing: it updates the plugin, not the
+reader. Both are wanted when both moved on.
+
+One case the button cannot reach: a copy from `cargo install` lives in
+`~/.cargo/bin`, and the update always writes to `~/.local/bin`. The installer
+says so when it finds both, because from there your `PATH` decides which one
+starts.
+
 Move the icon where you want it:
 
 ```bash

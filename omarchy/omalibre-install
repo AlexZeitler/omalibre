@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Fetches the released binary into ~/.local/bin, but only once the release
-# signature checks out against the key shipped beside this script.
+# signature checks out against the key shipped beside this script. The update
+# button in the panel comes here too: the newest release is what this fetches
+# either way, and unpacking it over an older copy is the whole of an update.
 #
 # The download URL under releases/latest is mutable on purpose: it always
 # points at the newest release, so what arrives here can change without the
@@ -56,8 +58,33 @@ gpg --dearmor < "$key" > "$work/keyring.gpg" \
 gpgv --keyring "$work/keyring.gpg" "$archive.asc" "$archive" \
   || abort "The signature does not match. This download is not the release it claims to be."
 
+# Whether this is a first install or an update decides the closing line, and
+# only the state before unpacking can tell them apart.
+updating=false
+if [[ -x "$target/omalibre" ]]; then
+  updating=true
+fi
+
 mkdir -p "$target"
 tar xzf "$archive" -C "$target"
 
 echo
-echo "Done. Point omalibre at your books with: omalibre --scan ~/Books"
+if [[ "$updating" == true ]]; then
+  echo "Updated to $("$target/omalibre" --version 2>/dev/null | awk '{print $NF}')."
+else
+  echo "Done. Point omalibre at your books with: omalibre --scan ~/Books"
+fi
+
+# `cargo install` puts its own copy in ~/.cargo/bin, and this only ever writes
+# to ~/.local/bin. With both on disk, which one starts is up to the PATH, so an
+# update written here can sit unused while the old build keeps running. Say so,
+# because nothing else on screen would.
+if [[ -x "$HOME/.cargo/bin/omalibre" ]]; then
+  echo
+  echo "There is a second omalibre in ~/.cargo/bin, from cargo install."
+  echo "This one was not touched, and your PATH decides which of the two runs."
+  echo "Remove it with: cargo uninstall omalibre"
+  echo
+  read -r -n 1 -s -p "Press any key to close."
+  echo
+fi
