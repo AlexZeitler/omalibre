@@ -21,22 +21,13 @@ omarchy plugin add https://github.com/AlexZeitler/omalibre.git --enable
 That puts a book icon in your bar. Open it and it offers to fetch Omalibre if
 it is not there yet. See [In the Omarchy bar](#in-the-omarchy-bar).
 
-Without the plugin, download it. One file, nothing else needed:
+What it fetches is a 64-bit Linux build with no dependencies at all, so the age
+of your distribution does not matter. It lands in `~/.local/bin`. If your shell
+cannot find `omalibre` afterwards, that directory is not on your `PATH`.
 
-```bash
-mkdir -p ~/.local/bin
-curl -fL https://github.com/AlexZeitler/omalibre/releases/latest/download/omalibre-x86_64-linux.tar.gz \
-  | tar xz -C ~/.local/bin
-```
-
-The plugin does not take this route. It checks the release signature before it
-unpacks anything, which is what `releases/latest` needs: the URL always points
-at the newest release, so what arrives can change without this page changing.
-To do the same by hand, see [Verifying a release](#verifying-a-release).
-
-That is a 64-bit Linux build with no dependencies at all, so the age of your
-distribution does not matter. If your shell cannot find `omalibre` afterwards,
-`~/.local/bin` is not on your `PATH`.
+The plugin checks the release signature before it unpacks anything, and
+installs nothing if the check fails. See
+[Verifying a release](#verifying-a-release).
 
 ### Or build it yourself
 
