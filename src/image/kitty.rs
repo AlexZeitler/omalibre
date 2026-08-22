@@ -26,7 +26,9 @@ pub fn encode_png(png: &[u8], cols: u16, rows: u16, id: u32) -> String {
         if first {
             // f=100 announces PNG, a=T places it, c and r give the cell box.
             // C=1 keeps the cursor where it is, so the text layout is untouched.
-            out.push_str(&format!("i={id},f=100,a=T,c={cols},r={rows},C=1,q=2,m={more}"));
+            out.push_str(&format!(
+                "i={id},f=100,a=T,c={cols},r={rows},C=1,q=2,m={more}"
+            ));
             first = false;
         } else {
             out.push_str(&format!("m={more}"));

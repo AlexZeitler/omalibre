@@ -9,9 +9,9 @@ mod find;
 mod identity;
 mod image;
 mod journal;
+mod layout;
 mod library;
 mod mcp;
-mod layout;
 mod paths;
 mod search;
 mod shelf;
@@ -228,7 +228,9 @@ fn browse() -> Result<()> {
                 }
             };
 
-            let Some((id, path)) = picked else { return Ok(()) };
+            let Some((id, path)) = picked else {
+                return Ok(());
+            };
             let book = match Book::open(&path) {
                 Ok(book) => book,
                 Err(_) => continue,
@@ -296,8 +298,7 @@ fn find_and_open(query: &str) -> Result<()> {
         let Some(index) = picked? else { return Ok(()) };
         let hit = &results.hits[index];
         let path = find::file_of(hit, &state)?;
-        let book = Book::open(&path)
-            .with_context(|| format!("cannot read {}", path.display()))?;
+        let book = Book::open(&path).with_context(|| format!("cannot read {}", path.display()))?;
 
         let id = hit.book.clone();
         let mut journal = Journal::open(&journal_dir)?;
@@ -465,16 +466,10 @@ fn open_reference(reference: &str, chapter: Option<&str>, at: Option<&str>) -> R
         .cloned()
         .with_context(|| format!("no file recorded for {}", record.display_title()))?;
 
-    let book = Book::open(&path)
-        .with_context(|| format!("cannot read {}", path.display()))?;
+    let book = Book::open(&path).with_context(|| format!("cannot read {}", path.display()))?;
     let target = chapter.map(str::to_string).or(from_file);
 
-    run_at(
-        book,
-        path,
-        target,
-        at.map(str::to_string).or(from_line),
-    )
+    run_at(book, path, target, at.map(str::to_string).or(from_line))
 }
 
 /// Turns a reference into a file and, where one is given, a line number.
@@ -661,12 +656,7 @@ fn run(book: Book, path: PathBuf) -> Result<()> {
 }
 
 /// Opens a book, optionally at a chapter and a passage.
-fn run_at(
-    book: Book,
-    path: PathBuf,
-    chapter: Option<String>,
-    at: Option<String>,
-) -> Result<()> {
+fn run_at(book: Book, path: PathBuf, chapter: Option<String>, at: Option<String>) -> Result<()> {
     first_start()?;
     let config = paths::Config::load()?;
     let journal_dir = config.journal_dir()?;
@@ -985,7 +975,11 @@ fn dump_chapter(mut book: Book, index: usize) -> Result<()> {
             doc::BlockKind::Image { src } => format!("img {}", src.as_deref().unwrap_or("-")),
         };
         let text = block.plain_text();
-        println!("{n:>4} {kind:<12} {:>4}ch  {}", text.chars().count(), truncate(&text, 90));
+        println!(
+            "{n:>4} {kind:<12} {:>4}ch  {}",
+            text.chars().count(),
+            truncate(&text, 90)
+        );
     }
     Ok(())
 }
@@ -1022,14 +1016,7 @@ fn list_images(mut book: Book, backend: image::Backend) -> Result<()> {
             match book.read_binary(&src) {
                 Ok(bytes) => {
                     readable += 1;
-                    match image::render(
-                        &bytes,
-                        80,
-                        20,
-                        backend,
-                        1,
-                        image::CellSize::default(),
-                    ) {
+                    match image::render(&bytes, 80, 20, backend, 1, image::CellSize::default()) {
                         Ok(picture) if picture.height() > 0 => {
                             rendered += 1;
                             let payload = picture.escape().map(str::len).unwrap_or(0);
@@ -1052,7 +1039,9 @@ fn list_images(mut book: Book, backend: image::Backend) -> Result<()> {
             }
         }
     }
-    println!("\n{total} images, {readable} readable, {rendered} rendered, {bytes_out} B of escapes");
+    println!(
+        "\n{total} images, {readable} readable, {rendered} rendered, {bytes_out} B of escapes"
+    );
     Ok(())
 }
 
@@ -1101,7 +1090,10 @@ fn truncate(text: &str, width: usize) -> String {
     if text.chars().count() <= width {
         return text.to_string();
     }
-    text.chars().take(width.saturating_sub(1)).collect::<String>() + "…"
+    text.chars()
+        .take(width.saturating_sub(1))
+        .collect::<String>()
+        + "…"
 }
 
 #[cfg(test)]

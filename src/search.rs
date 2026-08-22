@@ -67,11 +67,7 @@ impl Search {
     /// Selects the first match at or after a position. Returns whether one was
     /// found in this chapter.
     pub fn go_to_first_after(&mut self, block: usize, offset: usize) -> bool {
-        match self
-            .hits
-            .iter()
-            .position(|hit| *hit >= (block, offset))
-        {
+        match self.hits.iter().position(|hit| *hit >= (block, offset)) {
             Some(index) => {
                 self.current = Some(index);
                 true

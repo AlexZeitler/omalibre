@@ -201,11 +201,7 @@ impl State {
             .get(book)
             .map(|by_id| by_id.values().cloned().collect())
             .unwrap_or_default();
-        all.sort_by(|a, b| {
-            a.href
-                .cmp(&b.href)
-                .then_with(|| a.start().cmp(&b.start()))
-        });
+        all.sort_by(|a, b| a.href.cmp(&b.href).then_with(|| a.start().cmp(&b.start())));
         all
     }
 
@@ -274,9 +270,7 @@ impl State {
                 );
             }
             Payload::NoteSet { id, text } => {
-                if let Some(annotation) =
-                    self.annotations.entry(book).or_default().get_mut(&id)
-                {
+                if let Some(annotation) = self.annotations.entry(book).or_default().get_mut(&id) {
                     annotation.note = if text.trim().is_empty() {
                         None
                     } else {
@@ -285,9 +279,7 @@ impl State {
                 }
             }
             Payload::ColorSet { id, color } => {
-                if let Some(annotation) =
-                    self.annotations.entry(book).or_default().get_mut(&id)
-                {
+                if let Some(annotation) = self.annotations.entry(book).or_default().get_mut(&id) {
                     annotation.color = color;
                 }
             }
@@ -373,8 +365,7 @@ pub struct Journal {
 impl Journal {
     /// Opens the journal directory, creating it when missing.
     pub fn open(dir: &Path) -> Result<Self> {
-        std::fs::create_dir_all(dir)
-            .with_context(|| format!("cannot create {}", dir.display()))?;
+        std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
         let host = crate::paths::hostname();
         Ok(Self {
             own_file: dir.join(format!("journal-{host}.jsonl")),
@@ -400,7 +391,9 @@ impl Journal {
             if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
                 continue;
             }
-            let Ok(file) = File::open(&path) else { continue };
+            let Ok(file) = File::open(&path) else {
+                continue;
+            };
             for line in BufReader::new(file).lines().map_while(Result::ok) {
                 if line.trim().is_empty() {
                     continue;
@@ -594,7 +587,11 @@ mod tests {
                 Payload::HighlightAdded {
                     id: id.clone(),
                     href: "c.xhtml".into(),
-                    slices: vec![Slice { block: 1, start: 0, end: 4 }],
+                    slices: vec![Slice {
+                        block: 1,
+                        start: 0,
+                        end: 4,
+                    }],
                     color: Color::Yellow,
                     quote: "word".into(),
                 },
@@ -623,15 +620,34 @@ mod tests {
         let book = BookId::from("sha256:abc".to_string());
         let mut journal = Journal::open(&dir).unwrap();
         let id = journal.next_id();
-        journal.append(&book, Payload::HighlightAdded {
-            id: id.clone(),
-            href: "c.xhtml".into(),
-            slices: vec![Slice { block: 0, start: 0, end: 2 }],
-            color: Color::Blue,
-            quote: "ab".into(),
-        }).unwrap();
-        journal.append(&book, Payload::NoteSet { id: id.clone(), text: "x".into() }).unwrap();
-        journal.append(&book, Payload::AnnotationRemoved { id }).unwrap();
+        journal
+            .append(
+                &book,
+                Payload::HighlightAdded {
+                    id: id.clone(),
+                    href: "c.xhtml".into(),
+                    slices: vec![Slice {
+                        block: 0,
+                        start: 0,
+                        end: 2,
+                    }],
+                    color: Color::Blue,
+                    quote: "ab".into(),
+                },
+            )
+            .unwrap();
+        journal
+            .append(
+                &book,
+                Payload::NoteSet {
+                    id: id.clone(),
+                    text: "x".into(),
+                },
+            )
+            .unwrap();
+        journal
+            .append(&book, Payload::AnnotationRemoved { id })
+            .unwrap();
 
         assert!(Journal::replay(&dir).unwrap().annotations(&book).is_empty());
         std::fs::remove_dir_all(&dir).ok();
@@ -641,7 +657,11 @@ mod tests {
     fn an_empty_directory_replays_to_nothing() {
         let dir = scratch("empty");
         let state = Journal::replay(&dir).unwrap();
-        assert!(state.position(&BookId::from("sha256:abc".to_string())).is_none());
+        assert!(
+            state
+                .position(&BookId::from("sha256:abc".to_string()))
+                .is_none()
+        );
     }
 
     #[test]
@@ -652,10 +672,9 @@ mod tests {
         journal.record_position(&book, &locator(3, 0)).unwrap();
         journal.record_position(&book, &locator(3, 0)).unwrap();
 
-        let text = std::fs::read_to_string(dir.join(format!(
-            "journal-{}.jsonl",
-            crate::paths::hostname()
-        )))
+        let text = std::fs::read_to_string(
+            dir.join(format!("journal-{}.jsonl", crate::paths::hostname())),
+        )
         .unwrap();
         assert_eq!(text.lines().count(), 1);
         std::fs::remove_dir_all(&dir).ok();

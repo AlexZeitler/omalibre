@@ -39,8 +39,7 @@ pub struct Book {
 
 impl Book {
     pub fn open(path: &Path) -> Result<Self> {
-        let file = File::open(path)
-            .with_context(|| format!("cannot open {}", path.display()))?;
+        let file = File::open(path).with_context(|| format!("cannot open {}", path.display()))?;
         let mut archive = ZipArchive::new(file)
             .with_context(|| format!("{} is not a zip archive", path.display()))?;
 
@@ -333,9 +332,7 @@ fn parse_nav(xml: &str, nav_path: &str) -> Result<HashMap<String, String>> {
         .filter(|n| n.is_element() && n.tag_name().name() == "a")
     {
         if let (Some(href), Some(title)) = (anchor.attribute("href"), text_of(anchor)) {
-            titles
-                .entry(normalize(base, href))
-                .or_insert(title);
+            titles.entry(normalize(base, href)).or_insert(title);
         }
     }
     Ok(titles)
@@ -373,8 +370,14 @@ mod tests {
 
     #[test]
     fn normalizes_relative_hrefs() {
-        assert_eq!(normalize(Path::new("OEBPS"), "ch01.xhtml"), "OEBPS/ch01.xhtml");
-        assert_eq!(normalize(Path::new("OEBPS/text"), "../ch01.xhtml"), "OEBPS/ch01.xhtml");
+        assert_eq!(
+            normalize(Path::new("OEBPS"), "ch01.xhtml"),
+            "OEBPS/ch01.xhtml"
+        );
+        assert_eq!(
+            normalize(Path::new("OEBPS/text"), "../ch01.xhtml"),
+            "OEBPS/ch01.xhtml"
+        );
         assert_eq!(normalize(Path::new(""), "ch01.xhtml"), "ch01.xhtml");
     }
 
@@ -408,7 +411,10 @@ mod tests {
         let package = parse_package(opf).unwrap();
         assert_eq!(package.metadata.title.as_deref(), Some("A Book"));
         assert_eq!(package.metadata.authors, vec!["An Author"]);
-        assert_eq!(package.metadata.identifier.as_deref(), Some("urn:uuid:1234"));
+        assert_eq!(
+            package.metadata.identifier.as_deref(),
+            Some("urn:uuid:1234")
+        );
         assert_eq!(package.spine, vec!["c1", "c2"]);
         assert_eq!(package.nav_href.as_deref(), Some("nav.xhtml"));
     }
@@ -421,8 +427,14 @@ mod tests {
             <li><a href="ch02.xhtml#top">Second</a></li>
           </ol></nav></body></html>"#;
         let titles = parse_nav(nav, "OEBPS/nav.xhtml").unwrap();
-        assert_eq!(titles.get("OEBPS/ch01.xhtml").map(String::as_str), Some("First"));
-        assert_eq!(titles.get("OEBPS/ch02.xhtml").map(String::as_str), Some("Second"));
+        assert_eq!(
+            titles.get("OEBPS/ch01.xhtml").map(String::as_str),
+            Some("First")
+        );
+        assert_eq!(
+            titles.get("OEBPS/ch02.xhtml").map(String::as_str),
+            Some("Second")
+        );
     }
 
     #[test]
@@ -432,6 +444,9 @@ mod tests {
             <content src="ch01.xhtml"/></navPoint>
         </navMap></ncx>"#;
         let titles = parse_ncx(ncx, "OEBPS/toc.ncx").unwrap();
-        assert_eq!(titles.get("OEBPS/ch01.xhtml").map(String::as_str), Some("Chapter One"));
+        assert_eq!(
+            titles.get("OEBPS/ch01.xhtml").map(String::as_str),
+            Some("Chapter One")
+        );
     }
 }

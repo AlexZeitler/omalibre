@@ -46,7 +46,9 @@ pub enum BlockKind {
     Rule,
     /// An image. The runs hold its alt text, `src` the path inside the
     /// container, already resolved against the chapter.
-    Image { src: Option<String> },
+    Image {
+        src: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone)]

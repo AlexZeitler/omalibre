@@ -112,7 +112,6 @@ impl Annotation {
     pub fn has_note(&self) -> bool {
         self.note.as_ref().is_some_and(|n| !n.trim().is_empty())
     }
-
 }
 
 /// Relative luminance per WCAG 2.1.
@@ -201,8 +200,16 @@ mod tests {
             id: "a".into(),
             href: "c.xhtml".into(),
             slices: vec![
-                Slice { block: 7, start: 0, end: 4 },
-                Slice { block: 5, start: 9, end: 20 },
+                Slice {
+                    block: 7,
+                    start: 0,
+                    end: 4,
+                },
+                Slice {
+                    block: 5,
+                    start: 9,
+                    end: 20,
+                },
             ],
             color: Color::Yellow,
             quote: "text".into(),

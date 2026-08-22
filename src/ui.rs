@@ -135,11 +135,25 @@ fn draw_text(frame: &mut Frame, area: Rect, app: &App) {
                     None => Line::from(""),
                 },
                 None => render_line(
-                    line, scroll + row, &marks, selection, cursor, area.width, &theme, search,
+                    line,
+                    scroll + row,
+                    &marks,
+                    selection,
+                    cursor,
+                    area.width,
+                    &theme,
+                    search,
                 ),
             },
             _ => render_line(
-                line, scroll + row, &marks, selection, cursor, area.width, &theme, search,
+                line,
+                scroll + row,
+                &marks,
+                selection,
+                cursor,
+                area.width,
+                &theme,
+                search,
             ),
         })
         .collect();
@@ -454,7 +468,10 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
         let line = Line::from(vec![
             Span::raw(" ".repeat(SIDE_MARGIN as usize)),
             Span::styled("/", Style::default().fg(rgb(theme.accent))),
-            Span::styled(input.to_string(), Style::default().fg(rgb(theme.foreground))),
+            Span::styled(
+                input.to_string(),
+                Style::default().fg(rgb(theme.foreground)),
+            ),
             // A block marks where the next character lands.
             Span::styled("▏", Style::default().fg(rgb(theme.accent))),
         ]);
@@ -477,7 +494,10 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
         None => match app.annotation_at_cursor() {
             Some(mark) => match &mark.note {
                 Some(note) => format!("{}: {}", mark.color.label(), note),
-                None => format!("{} highlight, no comment - e writes one", mark.color.label()),
+                None => format!(
+                    "{} highlight, no comment - e writes one",
+                    mark.color.label()
+                ),
             },
             None => format!("{}  ·  {}", app.title(), app.chapter_title()),
         },
@@ -565,7 +585,10 @@ fn draw_annotations(frame: &mut Frame, area: Rect, app: &App) {
             let mut lines = vec![Line::from(vec![marker, Span::raw(" "), Span::raw(quote)])];
             if let Some(note) = &annotation.note {
                 lines.push(Line::from(Span::styled(
-                    format!("     {}", shorten(note, panel.width.saturating_sub(8) as usize)),
+                    format!(
+                        "     {}",
+                        shorten(note, panel.width.saturating_sub(8) as usize)
+                    ),
                     Style::default().fg(rgb(theme.muted)),
                 )));
             }
@@ -630,7 +653,11 @@ fn shorten(text: &str, width: usize) -> String {
     if collapsed.chars().count() <= width {
         return collapsed;
     }
-    collapsed.chars().take(width.saturating_sub(1)).collect::<String>() + "…"
+    collapsed
+        .chars()
+        .take(width.saturating_sub(1))
+        .collect::<String>()
+        + "…"
 }
 
 /// Kept for the help overlay that will follow.
@@ -692,7 +719,11 @@ pub fn draw_shelf(frame: &mut Frame, shelf: &mut crate::shelf::Shelf, theme: &cr
             } else {
                 Style::default()
             };
-            let dim = if selected { base } else { base.fg(rgb(theme.muted)) };
+            let dim = if selected {
+                base
+            } else {
+                base.fg(rgb(theme.muted))
+            };
 
             let mut spans = vec![
                 Span::styled(started.to_string(), base.fg(rgb(theme.accent))),
@@ -730,7 +761,10 @@ fn draw_shelf_status(
         let line = Line::from(vec![
             Span::raw(" ".repeat(SIDE_MARGIN as usize)),
             Span::styled("/", Style::default().fg(rgb(theme.accent))),
-            Span::styled(input.to_string(), Style::default().fg(rgb(theme.foreground))),
+            Span::styled(
+                input.to_string(),
+                Style::default().fg(rgb(theme.foreground)),
+            ),
             Span::styled("▏", Style::default().fg(rgb(theme.accent))),
         ]);
         frame.render_widget(Paragraph::new(line), area);
@@ -860,15 +894,25 @@ pub fn draw_hits(
             Style::default().add_modifier(Modifier::BOLD)
         };
         lines.push(Line::from(vec![
-            Span::styled(if selected { "▌ " } else { "  " }, heading.fg(rgb(theme.accent))),
+            Span::styled(
+                if selected { "▌ " } else { "  " },
+                heading.fg(rgb(theme.accent)),
+            ),
             Span::styled(hit.book_title.clone(), heading),
             Span::styled(
                 format!("  ·  {}", hit.chapter_title),
-                if selected { heading } else { Style::default().fg(rgb(theme.muted)) },
+                if selected {
+                    heading
+                } else {
+                    Style::default().fg(rgb(theme.muted))
+                },
             ),
         ]));
         lines.push(Line::from(Span::styled(
-            format!("    {}", shorten(&hit.snippet, inner.width.saturating_sub(6) as usize)),
+            format!(
+                "    {}",
+                shorten(&hit.snippet, inner.width.saturating_sub(6) as usize)
+            ),
             Style::default().fg(rgb(theme.muted)),
         )));
         lines.push(Line::from(""));

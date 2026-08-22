@@ -152,7 +152,11 @@ pub fn filter(entries: &[Entry], needle: &str) -> Vec<Entry> {
 
     let at_word_start: Vec<Entry> = entries
         .iter()
-        .filter(|entry| fields_of(entry).iter().any(|text| starts_a_word(text, &needle)))
+        .filter(|entry| {
+            fields_of(entry)
+                .iter()
+                .any(|text| starts_a_word(text, &needle))
+        })
         .cloned()
         .collect();
     if !at_word_start.is_empty() {
@@ -377,7 +381,10 @@ mod tests {
             entry("First", "A", Some("Saga"), Some(1.0)),
         ];
         sort(&mut list, Order::Series);
-        let titles: Vec<_> = list.iter().map(|e| e.record.title.clone().unwrap()).collect();
+        let titles: Vec<_> = list
+            .iter()
+            .map(|e| e.record.title.clone().unwrap())
+            .collect();
         assert_eq!(titles, ["First", "Interlude", "Third"]);
     }
 
@@ -414,7 +421,10 @@ mod tests {
 
         let mut list = vec![old, never, fresh];
         sort(&mut list, Order::Recent);
-        let titles: Vec<_> = list.iter().map(|e| e.record.title.clone().unwrap()).collect();
+        let titles: Vec<_> = list
+            .iter()
+            .map(|e| e.record.title.clone().unwrap())
+            .collect();
         assert_eq!(titles, ["Fresher", "Older", "Never opened"]);
     }
 
@@ -427,7 +437,10 @@ mod tests {
         // "event" hides inside "Prevention", but starts a word in the other title.
         let found = filter(&list, "event");
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].record.title.as_deref(), Some("Understanding Eventsourcing"));
+        assert_eq!(
+            found[0].record.title.as_deref(),
+            Some("Understanding Eventsourcing")
+        );
     }
 
     #[test]

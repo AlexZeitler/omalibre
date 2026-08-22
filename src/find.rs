@@ -226,7 +226,10 @@ fn tidy(snippet: &str) -> String {
         .lines()
         .filter(|line| !is_bookkeeping(line) && !line.trim().is_empty())
         .collect();
-    body.join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+    body.join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // ----- without qmd -----
@@ -329,7 +332,10 @@ mod tests {
             "qmd://books/some-book-1234abcd/019-15-accessories.md:13",
             Path::new("/export"),
         );
-        assert_eq!(path, PathBuf::from("/export/some-book-1234abcd/019-15-accessories.md"));
+        assert_eq!(
+            path,
+            PathBuf::from("/export/some-book-1234abcd/019-15-accessories.md")
+        );
         assert_eq!(line, Some(13));
     }
 

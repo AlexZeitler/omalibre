@@ -347,11 +347,8 @@ fn read_chapter(state: &State, args: &Value) -> Result<String> {
         .and_then(|item| item.title.clone())
         .unwrap_or_else(|| format!("Chapter {}", index + 1));
 
-    let body = export::chapter_markdown_titled(
-        &chapter,
-        Some(&record.display_title()),
-        Some(&title),
-    );
+    let body =
+        export::chapter_markdown_titled(&chapter, Some(&record.display_title()), Some(&title));
     let mut out = format!(
         "chapter {} of {} · {} · {}\n\n",
         index + 1,
@@ -656,8 +653,8 @@ mod tests {
 
     #[test]
     fn tools_list_answers_with_all_of_them() {
-        let response = handle(&request("tools/list", json!({})), &PathBuf::from("/x"))
-            .expect("an answer");
+        let response =
+            handle(&request("tools/list", json!({})), &PathBuf::from("/x")).expect("an answer");
         let tools = response["result"]["tools"].as_array().expect("array");
         assert_eq!(tools.len(), 6);
     }
@@ -670,8 +667,8 @@ mod tests {
 
     #[test]
     fn an_unknown_method_is_an_error() {
-        let response = handle(&request("nonsense", json!({})), &PathBuf::from("/x"))
-            .expect("an answer");
+        let response =
+            handle(&request("nonsense", json!({})), &PathBuf::from("/x")).expect("an answer");
         assert_eq!(response["error"]["code"], -32601);
     }
 

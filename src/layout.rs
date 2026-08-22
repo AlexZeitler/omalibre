@@ -43,13 +43,18 @@ pub enum LineKind {
     Code,
     Rule,
     /// One row of a picture. `row` says which, so the view knows what to paint.
-    Image { row: u16, rows: u16 },
+    Image {
+        row: u16,
+        rows: u16,
+    },
     /// Vertical spacing between blocks.
     Blank,
     /// A comment on an annotation, shown under the block it belongs to. It is
     /// not part of the book, so it holds no text position. Carries the colour of
     /// its annotation, so passage and comment read as one thing.
-    Note { color: (u8, u8, u8) },
+    Note {
+        color: (u8, u8, u8),
+    },
 }
 
 /// A picture that is ready to be placed, with the height it needs.
@@ -350,7 +355,11 @@ fn push_note(block: usize, note: &NoteAnchor, width: u16, out: &mut Vec<Line>) {
             pieces: vec![
                 // Both prefix and text are decoration: the comment is not part
                 // of the book, so it must not shift any offset.
-                Piece::decoration(if at == 0 { PREFIX.to_string() } else { "  ".to_string() }),
+                Piece::decoration(if at == 0 {
+                    PREFIX.to_string()
+                } else {
+                    "  ".to_string()
+                }),
                 Piece::decoration(text),
             ],
         });
@@ -391,7 +400,6 @@ fn needs_leading_blank(kind: &BlockKind, previous: Option<LineKind>) -> bool {
         _ => true,
     }
 }
-
 
 /// Style spans over the block's plain text, as character ranges.
 struct StyleMap {
@@ -600,7 +608,12 @@ mod tests {
                 },
             ],
         };
-        let lines = layout_with_notes(&chapter_of(vec![block]), 100, LayoutOptions { max_width: 12 }, &[]);
+        let lines = layout_with_notes(
+            &chapter_of(vec![block]),
+            100,
+            LayoutOptions { max_width: 12 },
+            &[],
+        );
         assert!(lines.len() > 1);
         // The bold run survives the break on both lines.
         assert!(lines[0].pieces.iter().any(|p| p.style.bold));
@@ -619,7 +632,12 @@ mod tests {
                 style: RunStyle::default(),
             }],
         };
-        let lines = layout_with_notes(&chapter_of(vec![block]), 100, LayoutOptions { max_width: 20 }, &[]);
+        let lines = layout_with_notes(
+            &chapter_of(vec![block]),
+            100,
+            LayoutOptions { max_width: 20 },
+            &[],
+        );
         assert_eq!(lines[0].indent, 2);
         assert_eq!(lines[0].pieces[0].text, "1. ");
         assert!(lines[1].indent > lines[0].indent);
@@ -659,7 +677,10 @@ mod tests {
             .position(|l| l.block == 1 && l.kind == LineKind::Body)
             .expect("second paragraph missing");
         assert!(note_at < second_at, "comment must precede the next block");
-        assert!(matches!(lines[note_at].kind, LineKind::Note { color: (1, 2, 3) }));
+        assert!(matches!(
+            lines[note_at].kind,
+            LineKind::Note { color: (1, 2, 3) }
+        ));
     }
 
     #[test]
@@ -671,7 +692,10 @@ mod tests {
             text: "note".into(),
         }];
         let lines = layout_with_notes(&chapter, 100, LayoutOptions::default(), &notes);
-        for line in lines.iter().filter(|l| matches!(l.kind, LineKind::Note { .. })) {
+        for line in lines
+            .iter()
+            .filter(|l| matches!(l.kind, LineKind::Note { .. }))
+        {
             assert_eq!(line.text_len(), 0);
             assert!(!line.is_selectable());
         }

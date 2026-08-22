@@ -34,8 +34,7 @@ pub struct Report {
 /// command useless in a loop.
 pub fn export(dir: &Path, state: &State, force: bool, journal_dir: &Path) -> Result<Report> {
     let mut report = Report::default();
-    std::fs::create_dir_all(dir)
-        .with_context(|| format!("cannot create {}", dir.display()))?;
+    std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     // Annotations follow the journal, not the book file, so they need their own
     // yardstick for what counts as current.
     let journal_changed = newest_in(journal_dir);
@@ -110,11 +109,8 @@ pub fn export(dir: &Path, state: &State, force: bool, journal_dir: &Path) -> Res
             let Ok(chapter) = book.chapter(index) else {
                 continue;
             };
-            let body = chapter_markdown_titled(
-                &chapter,
-                Some(&record.display_title()),
-                Some(&title),
-            );
+            let body =
+                chapter_markdown_titled(&chapter, Some(&record.display_title()), Some(&title));
             if body.trim().is_empty() {
                 continue;
             }
@@ -377,10 +373,9 @@ pub struct Origin {
 /// Reads the front matter of an exported file. This is what turns a search hit
 /// back into a place in a book.
 pub fn origin_of(path: &Path) -> Result<Origin> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("cannot read {}", path.display()))?;
-    parse_origin(&text)
-        .with_context(|| format!("{} carries no book reference", path.display()))
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
+    parse_origin(&text).with_context(|| format!("{} carries no book reference", path.display()))
 }
 
 fn parse_origin(text: &str) -> Option<Origin> {
@@ -448,7 +443,11 @@ mod tests {
             "{md}"
         );
         // Exactly one first-level heading: the title.
-        assert_eq!(md.lines().filter(|l| l.starts_with("# ")).count(), 1, "{md}");
+        assert_eq!(
+            md.lines().filter(|l| l.starts_with("# ")).count(),
+            1,
+            "{md}"
+        );
         // The book's own headings sit below it.
         assert!(md.contains("## 34"));
         assert!(md.contains("## Pattern: Snapshots"));
@@ -564,7 +563,10 @@ mod tests {
 
     #[test]
     fn slugs_are_safe_file_names() {
-        assert_eq!(slugify("Kamal Handbook: The missing manual"), "kamal-handbook-the-missing-manual");
+        assert_eq!(
+            slugify("Kamal Handbook: The missing manual"),
+            "kamal-handbook-the-missing-manual"
+        );
         assert_eq!(slugify("C++ für Anfänger"), "c-f-r-anf-nger");
         assert_eq!(slugify("!!!"), "untitled");
         assert!(slugify(&"x".repeat(200)).chars().count() <= 60);

@@ -184,10 +184,7 @@ mod tests {
 
     #[test]
     fn kitty_outranks_sixel() {
-        assert_eq!(
-            classify("\x1b_Gi=1;OK\x1b\\\x1b[?62;4;22c"),
-            Backend::Kitty
-        );
+        assert_eq!(classify("\x1b_Gi=1;OK\x1b\\\x1b[?62;4;22c"), Backend::Kitty);
     }
 
     #[test]

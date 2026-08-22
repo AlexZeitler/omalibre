@@ -5,8 +5,8 @@
 //! knows nothing about a screen.
 
 use crate::identity::BookId;
-use crate::library::{self, Entry, Order};
 use crate::journal::State;
+use crate::library::{self, Entry, Order};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use std::path::PathBuf;
 
@@ -23,7 +23,10 @@ pub enum Mode {
 pub enum Action {
     None,
     /// Open this book for reading.
-    Open { id: BookId, path: PathBuf },
+    Open {
+        id: BookId,
+        path: PathBuf,
+    },
     Quit,
 }
 
@@ -159,9 +162,7 @@ impl Shelf {
                 self.status = None;
             }
             KeyCode::Char(' ') | KeyCode::PageDown => self.cursor = (self.cursor + page).min(last),
-            KeyCode::Backspace | KeyCode::PageUp => {
-                self.cursor = self.cursor.saturating_sub(page)
-            }
+            KeyCode::Backspace | KeyCode::PageUp => self.cursor = self.cursor.saturating_sub(page),
             KeyCode::Char('g') => self.pending = Some('g'),
             KeyCode::Char('G') => self.cursor = last,
             KeyCode::Char('/') => {
@@ -366,7 +367,11 @@ mod tests {
         }
         shelf.handle_key(key(KeyCode::Enter));
         assert!(shelf.entries().is_empty());
-        assert!(shelf.status().is_some_and(|s| s.contains("nothing matches")));
+        assert!(
+            shelf
+                .status()
+                .is_some_and(|s| s.contains("nothing matches"))
+        );
     }
 
     #[test]

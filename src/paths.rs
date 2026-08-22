@@ -140,7 +140,13 @@ pub fn hostname() -> String {
     let name: String = raw
         .trim()
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if name.is_empty() {
         "unknown-host".to_string()
@@ -157,7 +163,10 @@ mod tests {
     fn hostname_is_usable_in_a_filename() {
         let name = hostname();
         assert!(!name.is_empty());
-        assert!(name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+        assert!(
+            name.chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        );
     }
 
     #[test]

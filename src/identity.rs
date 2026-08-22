@@ -17,8 +17,7 @@ pub struct BookId(String);
 
 impl BookId {
     pub fn of_file(path: &Path) -> Result<Self> {
-        let file = File::open(path)
-            .with_context(|| format!("cannot open {}", path.display()))?;
+        let file = File::open(path).with_context(|| format!("cannot open {}", path.display()))?;
         let mut reader = BufReader::new(file);
         let mut hasher = Sha256::new();
         let mut buffer = vec![0u8; 64 * 1024];
@@ -42,7 +41,6 @@ impl BookId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-
 }
 
 impl fmt::Display for BookId {

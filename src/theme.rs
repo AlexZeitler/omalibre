@@ -218,7 +218,8 @@ fn parse(text: &str) -> Theme {
     };
     let fallback = Theme::default();
     let colors = file.colors;
-    let pick = |value: &Option<String>, default: Rgb| value.as_deref().and_then(hex).unwrap_or(default);
+    let pick =
+        |value: &Option<String>, default: Rgb| value.as_deref().and_then(hex).unwrap_or(default);
 
     let marks = [
         pick(&colors.mark_yellow, BUILT_IN_MARKS[0]),
@@ -323,7 +324,11 @@ mod tests {
     fn the_theme_name_comes_from_the_state_directory() {
         let home = scratch("name");
         std::fs::create_dir_all(home.join(".local/state/omarchy/current")).unwrap();
-        std::fs::write(home.join(".local/state/omarchy/current/theme.name"), "giants\n").unwrap();
+        std::fs::write(
+            home.join(".local/state/omarchy/current/theme.name"),
+            "giants\n",
+        )
+        .unwrap();
 
         assert_eq!(current_theme_name(&home).as_deref(), Some("giants"));
     }
@@ -332,7 +337,11 @@ mod tests {
     fn an_older_layout_still_yields_the_theme_name() {
         let home = scratch("name-old");
         std::fs::create_dir_all(home.join(".config/omarchy/current")).unwrap();
-        std::fs::write(home.join(".config/omarchy/current/theme.name"), "matte-black").unwrap();
+        std::fs::write(
+            home.join(".config/omarchy/current/theme.name"),
+            "matte-black",
+        )
+        .unwrap();
 
         assert_eq!(current_theme_name(&home).as_deref(), Some("matte-black"));
     }
@@ -342,11 +351,23 @@ mod tests {
         // The template is the only source of the theme file, so a field the
         // reader parses but the template never writes would silently fall back.
         for field in [
-            "background", "foreground", "accent", "muted",
-            "code_background", "code_foreground", "quote",
-            "mark_yellow", "mark_green", "mark_blue", "mark_red", "mark_purple",
+            "background",
+            "foreground",
+            "accent",
+            "muted",
+            "code_background",
+            "code_foreground",
+            "quote",
+            "mark_yellow",
+            "mark_green",
+            "mark_blue",
+            "mark_red",
+            "mark_purple",
         ] {
-            assert!(TEMPLATE.contains(&format!("{field} = ")), "{field} is missing");
+            assert!(
+                TEMPLATE.contains(&format!("{field} = ")),
+                "{field} is missing"
+            );
         }
     }
 
@@ -400,7 +421,10 @@ mod tests {
             mark_purple = "#FF40A3"
             "##,
         );
-        assert_eq!(theme.marks, BUILT_IN_MARKS, "colliding marks must be dropped");
+        assert_eq!(
+            theme.marks, BUILT_IN_MARKS,
+            "colliding marks must be dropped"
+        );
     }
 
     #[test]

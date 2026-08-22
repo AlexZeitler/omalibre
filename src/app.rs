@@ -215,7 +215,12 @@ impl App {
     /// the next draw. The mode belongs in it because an overlay covers the text
     /// with cells, which leaves any picture underneath showing through.
     pub fn frame_token(&self) -> (usize, usize, u16, Mode) {
-        (self.chapter_index, self.scroll, self.laid_out_for, self.mode)
+        (
+            self.chapter_index,
+            self.scroll,
+            self.laid_out_for,
+            self.mode,
+        )
     }
 
     /// True when a picture needs a pixel protocol to appear.
@@ -297,9 +302,7 @@ impl App {
             .iter()
             .enumerate()
             .filter_map(|(index, block)| match &block.kind {
-                crate::doc::BlockKind::Image { src: Some(src) } => {
-                    Some((index, src.clone()))
-                }
+                crate::doc::BlockKind::Image { src: Some(src) } => Some((index, src.clone())),
                 _ => None,
             })
             .collect();
@@ -755,7 +758,10 @@ impl App {
                 self.search.set_query(query);
                 self.search.scan(&self.chapter);
                 // Start from where the reader stands, not from the chapter's top.
-                let from = self.position().map(|p| (p.block, p.offset)).unwrap_or((0, 0));
+                let from = self
+                    .position()
+                    .map(|p| (p.block, p.offset))
+                    .unwrap_or((0, 0));
                 if self.search.go_to_first_after(from.0, from.1) {
                     self.show_current_match();
                 } else {
@@ -846,8 +852,7 @@ impl App {
     fn cursor_is_visible(&self) -> bool {
         match self.cursor {
             Some(cursor) => {
-                cursor.line >= self.scroll
-                    && cursor.line < self.scroll + self.view_height as usize
+                cursor.line >= self.scroll && cursor.line < self.scroll + self.view_height as usize
             }
             None => false,
         }
@@ -868,8 +873,7 @@ impl App {
         if self.anchor.is_some() {
             self.mode = Mode::Visual;
             self.linewise = linewise;
-            self.status =
-                Some("y highlights, m+y/g/b/r/p picks a colour, a comments".into());
+            self.status = Some("y highlights, m+y/g/b/r/p picks a colour, a comments".into());
         }
     }
 
@@ -881,7 +885,9 @@ impl App {
     }
 
     fn move_cursor_horizontally(&mut self, delta: isize) {
-        let Some(mut cursor) = self.cursor else { return };
+        let Some(mut cursor) = self.cursor else {
+            return;
+        };
         let index = Index::new(&self.lines);
         if delta > 0 {
             let len = self.lines[cursor.line].text_len();
@@ -935,7 +941,9 @@ impl App {
     }
 
     fn move_cursor_to_line_edge(&mut self, end: bool) {
-        let Some(mut cursor) = self.cursor else { return };
+        let Some(mut cursor) = self.cursor else {
+            return;
+        };
         cursor.column = if end {
             self.lines[cursor.line].text_len().saturating_sub(1)
         } else {
@@ -980,7 +988,11 @@ impl App {
         let mut slices = Vec::new();
         for block in start_block..=end_block {
             let len = self.chapter.blocks.get(block)?.plain_text().chars().count();
-            let from = if block == start_block { start_offset } else { 0 };
+            let from = if block == start_block {
+                start_offset
+            } else {
+                0
+            };
             // The selection includes the character under the cursor.
             let to = if block == end_block {
                 (end_offset + 1).min(len)
@@ -995,7 +1007,11 @@ impl App {
                 });
             }
         }
-        if slices.is_empty() { None } else { Some(slices) }
+        if slices.is_empty() {
+            None
+        } else {
+            Some(slices)
+        }
     }
 
     fn quote_of(&self, slices: &[Slice]) -> String {
@@ -1255,10 +1271,10 @@ impl App {
     /// Deletes an annotation, whether it was picked in the list or under the
     /// cursor.
     fn remove(&mut self, id: &str) {
-        if let Err(err) = self.journal.append(
-            &self.id,
-            Payload::AnnotationRemoved { id: id.to_string() },
-        ) {
+        if let Err(err) = self
+            .journal
+            .append(&self.id, Payload::AnnotationRemoved { id: id.to_string() })
+        {
             self.status = Some(format!("cannot delete: {err}"));
             return;
         }
@@ -1526,10 +1542,7 @@ impl App {
             self.show_current_match();
             return;
         }
-        self.status = Some(format!(
-            "no more matches for {:?}",
-            self.search.query()
-        ));
+        self.status = Some(format!("no more matches for {:?}", self.search.query()));
     }
 
     /// Scrolls to the match the reader is on and reports which it is.
@@ -1628,7 +1641,10 @@ pub const BINDINGS: &[(&str, &[(&str, &str)])] = &[
             ("j k gg G", "move by line, to chapter edges"),
             ("v V", "start or end a selection"),
             ("y", "highlight in the default colour"),
-            ("m then y g b r p", "highlight in yellow, green, blue, red, purple"),
+            (
+                "m then y g b r p",
+                "highlight in yellow, green, blue, red, purple",
+            ),
             ("a", "annotate with a comment in $EDITOR"),
             ("e", "write or change the comment under the cursor"),
             ("d", "delete the annotation under the cursor"),
@@ -1747,7 +1763,10 @@ mod tests {
 
     #[test]
     fn splits_a_target_into_file_and_fragment() {
-        assert_eq!(split_target("ch03.xhtml#fn20"), ("ch03.xhtml", Some("fn20")));
+        assert_eq!(
+            split_target("ch03.xhtml#fn20"),
+            ("ch03.xhtml", Some("fn20"))
+        );
         assert_eq!(split_target("#fn20"), ("", Some("fn20")));
         assert_eq!(split_target("ch03.xhtml"), ("ch03.xhtml", None));
         // A trailing hash names no target.
@@ -1756,7 +1775,10 @@ mod tests {
 
     #[test]
     fn resolves_a_target_against_its_chapter() {
-        assert_eq!(resolve_href("OEBPS/ch01.xhtml", "ch02.xhtml"), "OEBPS/ch02.xhtml");
+        assert_eq!(
+            resolve_href("OEBPS/ch01.xhtml", "ch02.xhtml"),
+            "OEBPS/ch02.xhtml"
+        );
         assert_eq!(
             resolve_href("OEBPS/text/ch01.xhtml", "../notes.xhtml"),
             "OEBPS/notes.xhtml"

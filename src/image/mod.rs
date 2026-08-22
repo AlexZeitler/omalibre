@@ -156,7 +156,11 @@ fn fit_pixels(
             let pixel_width = (cols * cell_w) as u32;
             let pixel_height = (rows * cell_h) as u32;
             let scaled = decoded
-                .resize_exact(pixel_width.max(1), pixel_height.max(1), FilterType::Triangle)
+                .resize_exact(
+                    pixel_width.max(1),
+                    pixel_height.max(1),
+                    FilterType::Triangle,
+                )
                 .to_rgba8();
             sixel::encode(&scaled)
         }
@@ -238,7 +242,9 @@ pub(crate) fn flatten([r, g, b, a]: [u8; 4]) -> (u8, u8, u8) {
     }
     let alpha = a as f32 / 255.0;
     let over = |channel: u8| -> u8 {
-        (channel as f32 * alpha + 255.0 * (1.0 - alpha)).round().clamp(0.0, 255.0) as u8
+        (channel as f32 * alpha + 255.0 * (1.0 - alpha))
+            .round()
+            .clamp(0.0, 255.0) as u8
     };
     (over(r), over(g), over(b))
 }

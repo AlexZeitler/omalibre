@@ -374,14 +374,23 @@ impl Walker {
         let text = collect_raw_text(node);
         for line in text.lines() {
             let mut runs = RunBuilder::default();
-            runs.push(line, style.merged(RunStyle { code: true, ..RunStyle::default() }));
+            runs.push(
+                line,
+                style.merged(RunStyle {
+                    code: true,
+                    ..RunStyle::default()
+                }),
+            );
             let runs = runs.finish();
             self.blocks.push(Block {
                 kind: BlockKind::Code,
                 runs: if runs.is_empty() {
                     vec![crate::doc::Run {
                         text: String::new(),
-                        style: RunStyle { code: true, ..RunStyle::default() },
+                        style: RunStyle {
+                            code: true,
+                            ..RunStyle::default()
+                        },
                     }]
                 } else {
                     runs
@@ -524,10 +533,9 @@ mod tests {
 
     #[test]
     fn extracts_headings_and_paragraphs() {
-        let blocks = parse(
-            r#"<html><body><h1>Title</h1><p>First <em>word</em>.</p></body></html>"#,
-        )
-        .unwrap();
+        let blocks =
+            parse(r#"<html><body><h1>Title</h1><p>First <em>word</em>.</p></body></html>"#)
+                .unwrap();
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].kind, BlockKind::Heading(1));
         assert_eq!(blocks[0].plain_text(), "Title");
@@ -567,16 +575,25 @@ mod tests {
         assert_eq!(texts, vec!["outer one", "inner", "outer two"]);
         assert_eq!(
             blocks[0].kind,
-            BlockKind::ListItem { depth: 0, ordinal: Some(1) }
+            BlockKind::ListItem {
+                depth: 0,
+                ordinal: Some(1)
+            }
         );
         assert_eq!(
             blocks[1].kind,
-            BlockKind::ListItem { depth: 1, ordinal: Some(1) }
+            BlockKind::ListItem {
+                depth: 1,
+                ordinal: Some(1)
+            }
         );
         // The outer list keeps counting after the nested one.
         assert_eq!(
             blocks[2].kind,
-            BlockKind::ListItem { depth: 0, ordinal: Some(2) }
+            BlockKind::ListItem {
+                depth: 0,
+                ordinal: Some(2)
+            }
         );
     }
 
