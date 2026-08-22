@@ -27,6 +27,7 @@ use journal::Journal;
 use layout::LayoutOptions;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
@@ -887,7 +888,19 @@ fn with_suspended_terminal<T>(
     outcome
 }
 
-/// Opens `$EDITOR` on a temporary file and returns what was written.
+/// Deletes the scratch file whichever way its function returns.
+///
+/// An editor that fails to start makes `edit_note` return early. Without this
+/// the note and the quoted passage stay on disk after that.
+struct Scratch(PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        std::fs::remove_file(&self.0).ok();
+    }
+}
+
+/// Opens `$EDITOR` on a scratch file and returns what was written.
 ///
 /// The quoted passage is put below a marker line as a reminder of what the
 /// comment refers to. The marker and everything under it is dropped again.
@@ -898,14 +911,30 @@ fn edit_note(request: &app::EditRequest) -> Result<String> {
         .or_else(|_| std::env::var("EDITOR"))
         .unwrap_or_else(|_| "vi".to_string());
 
-    let path = std::env::temp_dir().join(format!("omalibre-note-{}.md", std::process::id()));
+    // Not the shared temporary directory. This file holds the note and the
+    // passage it belongs to, and there every account on the machine may read
+    // it, for as long as the editor stays open.
+    let path = paths::scratch_dir()?.join(format!("note-{}.md", std::process::id()));
     let scaffold = format!(
         "{}\n\n{MARKER}\n{}\n",
         request.initial_text,
         request.quote.replace('\n', " ")
     );
+
+    // A run killed outright leaves a file behind, and process ids come round
+    // again, so clear the name before claiming it. create_new then refuses
+    // anything that appears in between.
+    std::fs::remove_file(&path).ok();
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&path)
+        .with_context(|| format!("cannot create {}", path.display()))?;
+    let scratch = Scratch(path.clone());
     // The existing comment goes first so the cursor lands on it.
-    std::fs::write(&path, scaffold)?;
+    file.write_all(scaffold.as_bytes())?;
+    drop(file);
 
     let status = std::process::Command::new(&editor)
         .arg(&path)
@@ -917,7 +946,7 @@ fn edit_note(request: &app::EditRequest) -> Result<String> {
     } else {
         String::new()
     };
-    std::fs::remove_file(&path).ok();
+    drop(scratch);
 
     // Keep only what stands above the marker.
     let body = text.split(MARKER).next().unwrap_or("");
@@ -1073,4 +1102,68 @@ fn truncate(text: &str, width: usize) -> String {
         return text.to_string();
     }
     text.chars().take(width.saturating_sub(1)).collect::<String>() + "…"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// Writes an executable stub that stands in for `$EDITOR`.
+    fn stub_editor(name: &str, body: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("omalibre-stub-{name}"));
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    fn a_request() -> app::EditRequest {
+        app::EditRequest {
+            annotation_id: "a1".to_string(),
+            initial_text: "what I thought".to_string(),
+            quote: "the passage".to_string(),
+        }
+    }
+
+    /// One test rather than several, because they would fight over `$EDITOR`.
+    #[test]
+    fn the_scratch_file_stays_private_and_never_outlives_the_edit() {
+        let report = std::env::temp_dir().join("omalibre-stub-report");
+        std::fs::remove_file(&report).ok();
+        let editor = stub_editor(
+            "stat",
+            &format!(
+                "stat -c '%a %n' \"$1\" > {}; printf 'the note\\n' > \"$1\"",
+                report.display()
+            ),
+        );
+        // SAFETY: no other test in this crate reads either variable.
+        unsafe {
+            std::env::remove_var("VISUAL");
+            std::env::set_var("EDITOR", &editor);
+        }
+
+        let text = edit_note(&a_request()).unwrap();
+        assert_eq!(text, "the note");
+
+        let recorded = std::fs::read_to_string(&report).unwrap();
+        let (mode, file) = recorded.trim().split_once(' ').unwrap();
+        assert_eq!(mode, "600", "the editor saw mode {mode}");
+
+        let dir = paths::scratch_dir().unwrap();
+        assert!(
+            Path::new(file).starts_with(&dir),
+            "{file} is outside {}",
+            dir.display()
+        );
+        assert!(!Path::new(file).exists(), "{file} outlived the edit");
+
+        // An editor that cannot start must not leave the note behind either.
+        unsafe { std::env::set_var("EDITOR", dir.join("no-such-editor")) };
+        assert!(edit_note(&a_request()).is_err());
+        assert!(!Path::new(file).exists(), "{file} survived a failed editor");
+
+        std::fs::remove_file(&editor).ok();
+        std::fs::remove_file(&report).ok();
+    }
 }

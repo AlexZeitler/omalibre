@@ -12,6 +12,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 const APP: &str = "omalibre";
@@ -97,6 +98,27 @@ pub fn data_dir() -> Result<PathBuf> {
         .context("cannot determine the data directory")
 }
 
+/// A private directory for short-lived files handed to another program.
+///
+/// The shared temporary directory will not do. A file there is readable by
+/// every account on the machine, and the note handed to an editor carries both
+/// what the reader wrote and the passage it belongs to. `XDG_RUNTIME_DIR` is
+/// per-user and already mode 0700. Where it is absent, the data directory
+/// serves: it sits under the home directory rather than in a world-writable
+/// one.
+pub fn scratch_dir() -> Result<PathBuf> {
+    let dir = match dirs::runtime_dir() {
+        Some(base) => base.join(APP),
+        None => data_dir()?.join("scratch"),
+    };
+    std::fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    // Set rather than assumed: create_dir_all applies the umask, and a
+    // directory left over from an earlier run keeps whatever mode it had.
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+        .with_context(|| format!("cannot restrict {}", dir.display()))?;
+    Ok(dir)
+}
+
 /// Replaces a leading `~` with the home directory.
 fn expand_tilde(path: &PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
@@ -150,5 +172,12 @@ mod tests {
         let config: Config = toml::from_str("").unwrap();
         assert_eq!(config.max_width, None);
         assert_eq!(config.journal_dir, None);
+    }
+
+    #[test]
+    fn the_scratch_directory_admits_nobody_else() {
+        let dir = scratch_dir().unwrap();
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "{} is {mode:o}", dir.display());
     }
 }
