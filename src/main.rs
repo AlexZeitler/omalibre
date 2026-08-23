@@ -727,23 +727,47 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<
         let moved = last_token.is_some_and(|last| last != token);
         // Either direction matters: pictures that are on screen have to go, and
         // pictures that are about to appear need a clean surface.
-        if moved && (pixels_on_screen || app.has_pixel_images()) {
-            repaint_everything(terminal)?;
-        }
+        let wiping = moved && (pixels_on_screen || app.has_pixel_images());
         last_token = Some(token);
 
-        // A theme switch replaces the colours under us. Checking after each key
-        // is enough and costs one stat call.
-        if app.refresh_theme() {
-            repaint_everything(terminal)?;
+        {
+            // The wipe above and the painting below are one frame to the reader,
+            // so the terminal is told to hold the display until both are done.
+            let _frame = HeldDisplay::begin();
+            if wiping {
+                repaint_everything(terminal)?;
+            }
+            // A theme switch replaces the colours under us. Checking after each
+            // key is enough and costs one stat call.
+            if app.refresh_theme() {
+                repaint_everything(terminal)?;
+            }
+
+            let mut placements = Vec::new();
+            terminal.draw(|frame| placements = ui::draw(frame, app))?;
+            place_images(app, &placements)?;
+            pixels_on_screen = !placements.is_empty();
         }
 
-        let mut placements = Vec::new();
-        terminal.draw(|frame| placements = ui::draw(frame, app))?;
-        place_images(app, &placements)?;
-        pixels_on_screen = !placements.is_empty();
         match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => app.handle_key(key),
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                app.handle_key(key);
+                // A held-down key delivers keys faster than a chapter full of
+                // pictures can be painted. Drawing each one would wipe the
+                // screen that often, so what is already waiting is taken now
+                // and shown as one frame.
+                while !app.should_quit
+                    && app.pending_edit.is_none()
+                    && event::poll(std::time::Duration::ZERO)?
+                {
+                    match event::read()? {
+                        Event::Key(next) if next.kind == KeyEventKind::Press => {
+                            app.handle_key(next)
+                        }
+                        _ => {}
+                    }
+                }
+            }
             _ => {}
         }
         // A comment is written in the user's editor, which needs the terminal to
@@ -757,6 +781,38 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<
         }
     }
     Ok(())
+}
+
+/// Keeps the terminal from showing a half-built frame.
+///
+/// A Sixel picture is part of the screen contents, so moving the view means
+/// wiping the screen and painting it again. Without this the empty screen
+/// between the two is visible, and scrolling past pictures flickers.
+///
+/// The mode is DEC 2026, which foot, Ghostty, kitty and others implement. A
+/// terminal that does not know it ignores it, as it must for any private mode
+/// it does not implement, so there is nothing to detect first.
+struct HeldDisplay;
+
+impl HeldDisplay {
+    fn begin() -> Self {
+        let mut out = std::io::stdout();
+        // Failing to hold the display costs a flicker, not correctness, so a
+        // write error here is not worth failing the frame over.
+        let _ = out.write_all(b"\x1b[?2026h");
+        let _ = out.flush();
+        HeldDisplay
+    }
+}
+
+impl Drop for HeldDisplay {
+    fn drop(&mut self) {
+        // Runs however the frame ended, so an error cannot leave the display
+        // frozen.
+        let mut out = std::io::stdout();
+        let _ = out.write_all(b"\x1b[?2026l");
+        let _ = out.flush();
+    }
 }
 
 /// Wipes the screen and marks every cell as changed, so the next draw paints

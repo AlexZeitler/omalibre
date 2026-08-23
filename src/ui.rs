@@ -91,6 +91,14 @@ fn placements(area: Rect, app: &App) -> Vec<Placement> {
         if escape.is_empty() {
             continue;
         }
+        // The terminal paints these pixels itself, so nothing clips them at the
+        // edge of the text: a picture whose lower half is below the fold would
+        // cover the status line. It waits until the whole of it fits, which is
+        // one more line of scrolling. Half block pictures are ordinary cells and
+        // never get here.
+        if row + rendered.height() > area.height as usize {
+            continue;
+        }
         out.push(Placement {
             column: area.x + line.indent,
             row: area.y + row as u16,

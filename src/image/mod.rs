@@ -97,6 +97,63 @@ pub fn render(
     })
 }
 
+/// Pixel size of an image, read from its header alone.
+///
+/// A chapter of rendered formulas holds hundreds of pictures, and the layout
+/// needs the height of each one. Decoding them all to find out costs seconds,
+/// so the size is taken from the header, which is a few bytes in.
+pub fn dimensions(bytes: &[u8]) -> Result<(u32, u32)> {
+    image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .context("cannot read image header")?
+        .into_dimensions()
+        .context("cannot read image size")
+}
+
+/// The cell box a picture will occupy, from its pixel size alone.
+///
+/// Shared with the two `fit` functions below, so a measured height and a
+/// rendered one cannot drift apart.
+pub fn measure(
+    (width, height): (u32, u32),
+    max_cols: u16,
+    max_rows: u16,
+    backend: Backend,
+    cell: CellSize,
+) -> (u16, u16) {
+    if width == 0 || height == 0 {
+        return (0, 0);
+    }
+    let (cols, rows) = match backend {
+        Backend::HalfBlocks => {
+            // One column is one pixel wide, one row is two tall.
+            let cols = max_cols.max(1) as f32;
+            let rows_from_width = (height as f32 / width as f32) * cols / CELL_ASPECT;
+            let rows = rows_from_width.round().max(1.0).min(max_rows.max(1) as f32);
+            // Recompute the width so a capped height does not stretch the picture.
+            let cols = (rows * CELL_ASPECT * width as f32 / height as f32)
+                .round()
+                .max(1.0)
+                .min(cols);
+            (cols, rows)
+        }
+        Backend::Kitty | Backend::Sixel => {
+            let cell_w = cell.width.max(1) as f32;
+            let cell_h = cell.height.max(1) as f32;
+            let by_width = max_cols.max(1) as f32;
+            let rows_needed = (height as f32 * (by_width * cell_w) / width as f32) / cell_h;
+            if rows_needed <= max_rows.max(1) as f32 {
+                (by_width, rows_needed.round().max(1.0))
+            } else {
+                let rows = max_rows.max(1) as f32;
+                let cols = (width as f32 * (rows * cell_h) / height as f32) / cell_w;
+                (cols.round().max(1.0).min(by_width), rows)
+            }
+        }
+    };
+    (cols as u16, rows as u16)
+}
+
 /// Size of one terminal cell in pixels. Needed to scale a picture to a whole
 /// number of cells, so the reserved lines match what the terminal paints.
 #[derive(Debug, Clone, Copy)]
@@ -126,8 +183,8 @@ fn fit_pixels(
     id: u32,
     cell: CellSize,
 ) -> Rendered {
-    let (width, height) = decoded.dimensions();
-    if width == 0 || height == 0 {
+    let (cols, rows) = measure(decoded.dimensions(), max_cols, max_rows, backend, cell);
+    if cols == 0 || rows == 0 {
         return Rendered {
             cols: 0,
             rows: 0,
@@ -135,26 +192,13 @@ fn fit_pixels(
         };
     }
 
-    // Work out the cell box the picture should fill, keeping its proportions.
-    let cell_w = cell.width.max(1) as f32;
-    let cell_h = cell.height.max(1) as f32;
-    let by_width = max_cols.max(1) as f32;
-    let rows_needed = (height as f32 * (by_width * cell_w) / width as f32) / cell_h;
-    let (cols, rows) = if rows_needed <= max_rows.max(1) as f32 {
-        (by_width, rows_needed.round().max(1.0))
-    } else {
-        let rows = max_rows.max(1) as f32;
-        let cols = (width as f32 * (rows * cell_h) / height as f32) / cell_w;
-        (cols.round().max(1.0).min(by_width), rows)
-    };
-
     let escape = match backend {
         // Kitty scales the original itself, which keeps every pixel.
-        Backend::Kitty => kitty::encode_png(original, cols as u16, rows as u16, id),
+        Backend::Kitty => kitty::encode_png(original, cols, rows, id),
         // Sixel carries no scaling, so the pixels are resized to the cell box.
         Backend::Sixel => {
-            let pixel_width = (cols * cell_w) as u32;
-            let pixel_height = (rows * cell_h) as u32;
+            let pixel_width = cols as u32 * cell.width.max(1) as u32;
+            let pixel_height = rows as u32 * cell.height.max(1) as u32;
             let scaled = decoded
                 .resize_exact(
                     pixel_width.max(1),
@@ -168,8 +212,8 @@ fn fit_pixels(
     };
 
     Rendered {
-        cols: cols as u16,
-        rows: rows as u16,
+        cols,
+        rows,
         payload: Payload::Escape(escape),
     }
 }
@@ -185,8 +229,14 @@ pub fn clear_all(backend: Backend) -> Option<String> {
 }
 
 fn fit(decoded: &DynamicImage, max_cols: u16, max_rows: u16) -> Rendered {
-    let (width, height) = decoded.dimensions();
-    if width == 0 || height == 0 {
+    let (cols, rows) = measure(
+        decoded.dimensions(),
+        max_cols,
+        max_rows,
+        Backend::HalfBlocks,
+        CellSize::default(),
+    );
+    if cols == 0 || rows == 0 {
         return Rendered {
             cols: 0,
             rows: 0,
@@ -195,17 +245,8 @@ fn fit(decoded: &DynamicImage, max_cols: u16, max_rows: u16) -> Rendered {
     }
 
     // Target size in pixels: one column is one pixel wide, one row is two tall.
-    let cols = max_cols.max(1) as f32;
-    let rows_from_width = (height as f32 / width as f32) * cols / CELL_ASPECT;
-    let rows = rows_from_width.round().max(1.0).min(max_rows.max(1) as f32);
-    // Recompute the width so a capped height does not stretch the picture.
-    let cols = (rows * CELL_ASPECT * width as f32 / height as f32)
-        .round()
-        .max(1.0)
-        .min(cols);
-
     let pixel_width = cols as u32;
-    let pixel_height = (rows * 2.0) as u32;
+    let pixel_height = rows as u32 * 2;
     let scaled = decoded
         .resize_exact(pixel_width, pixel_height, FilterType::Triangle)
         .to_rgba8();
@@ -316,5 +357,49 @@ mod tests {
     fn an_empty_image_renders_to_nothing() {
         let empty = DynamicImage::ImageRgba8(RgbaImage::new(0, 0));
         assert_eq!(fit(&empty, 40, 20).height(), 0);
+    }
+
+    /// A PNG of the given size, so `render` can be driven the way the reader
+    /// drives it: from bytes.
+    fn encoded(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        solid(width, height, [0, 0, 0, 255])
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .unwrap();
+        bytes.into_inner()
+    }
+
+    #[test]
+    fn a_header_gives_the_same_size_as_a_full_decode() {
+        for (width, height) in [(100u32, 100u32), (640, 480), (7, 900), (1, 1)] {
+            let bytes = encoded(width, height);
+            assert_eq!(
+                dimensions(&bytes).unwrap(),
+                (width, height),
+                "{width}x{height}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_measured_picture_comes_out_exactly_that_tall() {
+        // The layout reserves rows from `measure` and the view paints what
+        // `render` produced. They must agree, or text lands on top of a picture.
+        let cell = CellSize {
+            width: 8,
+            height: 16,
+        };
+        for backend in [Backend::HalfBlocks, Backend::Kitty, Backend::Sixel] {
+            for (width, height) in [(100u32, 100u32), (640, 480), (7, 900), (300, 40)] {
+                let bytes = encoded(width, height);
+                let measured = measure(dimensions(&bytes).unwrap(), 40, 12, backend, cell);
+                let rendered = render(&bytes, 40, 12, backend, 1, cell).unwrap();
+                assert_eq!(
+                    (rendered.width() as u16, rendered.height() as u16),
+                    measured,
+                    "{backend:?} on {width}x{height}"
+                );
+            }
+        }
     }
 }

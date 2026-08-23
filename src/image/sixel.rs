@@ -39,16 +39,42 @@ fn step(index: usize) -> u8 {
     (index * 255 / (LEVELS - 1)) as u8
 }
 
+/// Squared distance between two colours.
+fn distance((ar, ag, ab): (u8, u8, u8), (br, bg, bb): (u8, u8, u8)) -> u32 {
+    (ar as i32 - br as i32).pow(2) as u32
+        + (ag as i32 - bg as i32).pow(2) as u32
+        + (ab as i32 - bb as i32).pow(2) as u32
+}
+
+/// The cube level closest to one channel value.
+///
+/// The levels sit at 0, 51, 102, 153, 204 and 255, so the nearest one is the
+/// value divided by the spacing and rounded. No value lands exactly between two
+/// levels, because the spacing is odd.
+fn level_of(value: u8) -> usize {
+    ((value as u32 * (LEVELS as u32 - 1) + 127) / 255) as usize
+}
+
 /// Nearest palette entry for a pixel, by squared distance.
-fn nearest(palette: &[(u8, u8, u8)], (r, g, b): (u8, u8, u8)) -> usize {
-    let mut best = 0;
-    let mut best_distance = u32::MAX;
-    for (index, &(pr, pg, pb)) in palette.iter().enumerate() {
-        let distance = (pr as i32 - r as i32).pow(2) as u32
-            + (pg as i32 - g as i32).pow(2) as u32
-            + (pb as i32 - b as i32).pow(2) as u32;
-        if distance < best_distance {
-            best_distance = distance;
+///
+/// The cube is a regular grid, so its nearest point follows from rounding each
+/// channel on its own: on a rectangular grid that minimises the euclidean
+/// distance, and no search is needed. Only the grey ramp is scanned, and it
+/// holds a tenth of the palette. Searching all entries cost a book of rendered
+/// formulas about sixteen seconds a chapter.
+///
+/// Ties go to the lower index, as a scan over the whole palette would give.
+fn nearest(palette: &[(u8, u8, u8)], pixel: (u8, u8, u8)) -> usize {
+    let (r, g, b) = pixel;
+    let cube = level_of(r) * LEVELS * LEVELS + level_of(g) * LEVELS + level_of(b);
+    let mut best = cube;
+    let mut best_distance = distance(palette[cube], pixel);
+
+    let greys = LEVELS * LEVELS * LEVELS;
+    for index in greys..palette.len() {
+        let candidate = distance(palette[index], pixel);
+        if candidate < best_distance {
+            best_distance = candidate;
             best = index;
         }
     }
@@ -229,6 +255,53 @@ mod tests {
     #[test]
     fn an_empty_image_encodes_to_nothing() {
         assert!(encode(&RgbaImage::new(0, 0)).is_empty());
+    }
+
+    /// What `nearest` replaced: a scan over every entry. Kept so the fast path
+    /// can be held against it.
+    fn nearest_by_scan(palette: &[(u8, u8, u8)], pixel: (u8, u8, u8)) -> usize {
+        let mut best = 0;
+        let mut best_distance = u32::MAX;
+        for (index, &entry) in palette.iter().enumerate() {
+            let candidate = distance(entry, pixel);
+            if candidate < best_distance {
+                best_distance = candidate;
+                best = index;
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn the_fast_lookup_agrees_with_a_full_scan() {
+        let palette = palette();
+        // Every eleventh value per channel, which lands on and between the cube
+        // levels and covers both ends. All 16.7 million were checked once by
+        // hand and agreed; this keeps the cheap part of that in the suite.
+        let values: Vec<u8> = (0..=255u8).step_by(11).chain([255]).collect();
+        for &r in &values {
+            for &g in &values {
+                for &b in &values {
+                    assert_eq!(
+                        nearest(&palette, (r, g, b)),
+                        nearest_by_scan(&palette, (r, g, b)),
+                        "rgb({r},{g},{b})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cube_levels_map_to_themselves() {
+        let palette = palette();
+        for level in 0..LEVELS {
+            let value = step(level);
+            let grey = (value, value, value);
+            // A cube corner is its own nearest entry, unless the grey ramp holds
+            // the very same colour at a lower index, which it never does.
+            assert_eq!(palette[nearest(&palette, grey)], grey, "level {level}");
+        }
     }
 
     #[test]

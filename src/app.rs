@@ -54,6 +54,14 @@ pub struct EditRequest {
     pub quote: String,
 }
 
+/// One picture of the chapter: where it sits, where its bytes are, and how much
+/// room it takes. Known before anything is decoded.
+struct ImageSlot {
+    block: usize,
+    src: String,
+    rows: u16,
+}
+
 pub struct App {
     book: Book,
     chapter_index: usize,
@@ -84,10 +92,16 @@ pub struct App {
     pending_restore: Option<Locator>,
     /// All annotations of this book, replayed at startup and kept in step.
     annotations: Vec<Annotation>,
-    /// Pictures of the current chapter, by block, rendered for the current
-    /// width. Decoding is costly, so this is rebuilt only when the width
-    /// changes or the chapter does.
+    /// Pictures on screen, by block. Only what the view shows is kept: a
+    /// chapter of rendered formulas holds hundreds of pictures, and decoding
+    /// them all took twenty seconds before the first line appeared.
     images: std::collections::HashMap<usize, crate::image::Rendered>,
+    /// Every picture of the chapter with the size it will take, measured from
+    /// the image headers. The layout needs all of them; decoding does not.
+    image_slots: Vec<ImageSlot>,
+    /// Width and maximum height the slots were measured for. Rendering reuses
+    /// it, so a picture comes out exactly as tall as the layout reserved.
+    image_box: (u16, u16),
     /// How this terminal draws pictures, decided once at startup.
     image_backend: crate::image::Backend,
     /// Pixel size of one cell, needed to scale pictures to whole cells.
@@ -148,6 +162,8 @@ impl App {
             pending_restore: restore,
             annotations,
             images: std::collections::HashMap::new(),
+            image_slots: Vec::new(),
+            image_box: (0, 0),
             image_backend: crate::image::Backend::HalfBlocks,
             cell_size: crate::image::CellSize::default(),
             theme: crate::theme::Watcher::new(),
@@ -283,18 +299,28 @@ impl App {
             .collect()
     }
 
-    /// Decodes and scales this chapter's pictures for the given width.
+    /// Works out how much room each of this chapter's pictures takes.
     ///
-    /// A picture that cannot be read is simply absent, and the layout falls back
-    /// to its alt text. A broken image must not cost the chapter.
-    fn render_images(&mut self, width: u16) {
+    /// Only the image headers are read, so this stays cheap however many
+    /// pictures a chapter holds. A picture whose header cannot be read gets no
+    /// slot, and the layout falls back to its alt text. A broken image must not
+    /// cost the chapter.
+    fn measure_images(&mut self, width: u16) {
         self.images.clear();
+        self.image_slots.clear();
+        self.image_box = (0, 0);
         if width < 8 {
             return;
         }
         // No picture may take more than this share of the view, so text stays
-        // visible around it.
-        let max_rows = (self.view_height as f32 * 0.8).round() as u16;
+        // visible around it. The floor of four rows keeps a picture recognisable
+        // in a short window, but never past the window itself: a picture taller
+        // than the text area would be held back at every scroll position and
+        // never appear at all.
+        let max_rows = ((self.view_height as f32 * 0.8).round() as u16)
+            .max(4)
+            .min(self.view_height);
+        self.image_box = (width, max_rows);
 
         let sources: Vec<(usize, String)> = self
             .chapter
@@ -307,22 +333,93 @@ impl App {
             })
             .collect();
 
-        for (id, (index, src)) in sources.into_iter().enumerate() {
+        for (index, src) in sources {
+            let Ok(bytes) = self.book.read_binary(&src) else {
+                continue;
+            };
+            let Ok(size) = crate::image::dimensions(&bytes) else {
+                continue;
+            };
+            let (_, rows) =
+                crate::image::measure(size, width, max_rows, self.image_backend, self.cell_size);
+            if rows == 0 {
+                continue;
+            }
+            self.image_slots.push(ImageSlot {
+                block: index,
+                src,
+                rows,
+            });
+        }
+    }
+
+    /// How much room the layout must leave for each picture.
+    fn image_placements(&self) -> Vec<layout::ImagePlacement> {
+        self.image_slots
+            .iter()
+            .map(|slot| layout::ImagePlacement {
+                block: slot.block,
+                rows: slot.rows,
+            })
+            .collect()
+    }
+
+    /// Decodes the pictures the view shows and drops the rest.
+    ///
+    /// Called before every draw, because scrolling changes which ones are
+    /// needed. Decoding one picture costs milliseconds; decoding a chapter of
+    /// them costs seconds, which is why only what is on screen is done.
+    fn render_visible(&mut self) {
+        let (width, max_rows) = self.image_box;
+        if width == 0 || self.image_slots.is_empty() {
+            return;
+        }
+        let height = self.view_height as usize;
+        let blocks_between = |from: usize, to: usize| -> std::collections::HashSet<usize> {
+            let from = from.min(self.lines.len());
+            let to = to.min(self.lines.len());
+            self.lines[from..to]
+                .iter()
+                .filter(|line| matches!(line.kind, layout::LineKind::Image { .. }))
+                .map(|line| line.block)
+                .collect()
+        };
+        let visible = blocks_between(self.scroll, self.scroll + height);
+        // Reading moves back as well as forward, and a picture just off the edge
+        // is about to be wanted again. Keeping a screen either way spares the
+        // decoding, and a handful of pictures is nothing to hold.
+        let nearby = blocks_between(self.scroll.saturating_sub(height), self.scroll + height * 2);
+
+        self.images.retain(|block, _| nearby.contains(block));
+
+        // The slot's position is its Kitty id, so a picture keeps the same id
+        // however often it leaves the screen and comes back.
+        let pending: Vec<(u32, usize, String)> = self
+            .image_slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| {
+                visible.contains(&slot.block) && !self.images.contains_key(&slot.block)
+            })
+            // Ids start at 1; 0 is reserved by the Kitty protocol.
+            .map(|(id, slot)| (id as u32 + 1, slot.block, slot.src.clone()))
+            .collect();
+
+        for (id, block, src) in pending {
             let Ok(bytes) = self.book.read_binary(&src) else {
                 continue;
             };
             let rendered = crate::image::render(
                 &bytes,
                 width,
-                max_rows.max(4),
+                max_rows,
                 self.image_backend,
-                // Ids start at 1; 0 is reserved by the Kitty protocol.
-                id as u32 + 1,
+                id,
                 self.cell_size,
             );
             if let Ok(rendered) = rendered {
                 if rendered.height() > 0 {
-                    self.images.insert(index, rendered);
+                    self.images.insert(block, rendered);
                 }
             }
         }
@@ -430,21 +527,17 @@ impl App {
         self.view_height = height.max(1);
         if width == self.laid_out_for && !self.lines.is_empty() {
             self.clamp_scroll();
+            // Scrolling moved other pictures into view, even though the layout
+            // still holds.
+            self.render_visible();
             return;
         }
         // Remember text positions, not line numbers: the wrap is about to change.
         let anchor_text = self.pending_restore.take().or_else(|| self.position());
         let cursor_text = self.cursor_text_position();
 
-        self.render_images(width);
-        let placements: Vec<layout::ImagePlacement> = self
-            .images
-            .iter()
-            .map(|(block, rendered)| layout::ImagePlacement {
-                block: *block,
-                rows: rendered.height() as u16,
-            })
-            .collect();
+        self.measure_images(width);
+        let placements = self.image_placements();
         self.lines = layout::layout_full(
             &self.chapter,
             width,
@@ -463,6 +556,8 @@ impl App {
             self.cursor = self.cursor_at(block, offset);
         }
         self.clamp_scroll();
+        // Last, because it needs the finished lines and the settled scroll.
+        self.render_visible();
     }
 
     pub fn position(&self) -> Option<Locator> {
