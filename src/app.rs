@@ -312,6 +312,11 @@ impl App {
         if width < 8 {
             return;
         }
+        // A picture belongs in the same column as the text, so it is measured
+        // against the same width: `layout_full` narrows the window this way
+        // too. Given the whole window instead, a picture broke out of the text
+        // on both counts, too wide and, scaled in proportion, too tall.
+        let width = width.min(self.options.max_width).max(8);
         // No picture may take more than this share of the view, so text stays
         // visible around it. The floor of four rows keeps a picture recognisable
         // in a short window, but never past the window itself: a picture taller

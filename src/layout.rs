@@ -177,7 +177,7 @@ pub struct LayoutOptions {
 impl Default for LayoutOptions {
     fn default() -> Self {
         // Use the full window. A narrower measure, around 66 columns, reads
-        // better for body text and will become a setting.
+        // better for body text; `max_width` in the configuration sets one.
         Self {
             max_width: u16::MAX,
         }
