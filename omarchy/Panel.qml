@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
@@ -63,6 +64,16 @@ Panel {
   readonly property int recentCount: 5
   readonly property int matchCount: 8
 
+  // What an empty library is told to run. Spelled out once so the button
+  // copies exactly what the label reads.
+  readonly property string scanCommand: "omalibre --scan ~/Books"
+
+  // --recent answers "read last", not "in the library": a freshly scanned
+  // book with no reading position yet leaves it empty too. -1 means this
+  // has not come back yet, and is treated as "assume empty" the way the
+  // panel always has, rather than flashing a wrong message first.
+  property int libraryTotal: -1
+
   readonly property bool searching: root.runningQuery.trim() !== ""
   readonly property int limit: root.searching ? root.matchCount : root.recentCount
   readonly property var shownBooks: root.books.slice(0, root.limit)
@@ -95,6 +106,26 @@ Panel {
 
   function refresh() {
     root.requestBooks(root.wantedQuery)
+    root.checkLibraryTotal()
+  }
+
+  // Answers the question --recent can't: whether the library holds any book
+  // at all, scanned but unread included. Local and JSON-only, so this stays
+  // cheap enough to run every time the panel opens.
+  function checkLibraryTotal() {
+    if (libraryCheckProcess.running) return
+    libraryCheckProcess.running = true
+  }
+
+  function takeLibraryTotal(raw) {
+    var text = (raw || "").trim()
+    if (text === "NOT_INSTALLED" || text === "") return
+    try {
+      var parsed = JSON.parse(text)
+      root.libraryTotal = Array.isArray(parsed) ? parsed.length : -1
+    } catch (error) {
+      // Leave the last known total rather than guess from unparsable output.
+    }
   }
 
   function takeBooks(raw) {
@@ -143,6 +174,12 @@ Panel {
   function install() {
     installProcess.running = true
     root.close()
+  }
+
+  // No shell in the middle: the command is a fixed string, not something
+  // built from input, so there is nothing for a pipe to quote.
+  function copyScanCommand() {
+    Quickshell.execDetached(["wl-copy", root.scanCommand])
   }
 
   // Asks GitHub over the network, so never in the way of the list: the panel
@@ -205,10 +242,14 @@ Panel {
       searchField.text = ""
       root.requestBooks("")
       root.checkForUpdate()
+      root.checkLibraryTotal()
     }
   }
 
-  Component.onCompleted: root.requestBooks("")
+  Component.onCompleted: {
+    root.requestBooks("")
+    root.checkLibraryTotal()
+  }
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -231,6 +272,15 @@ Panel {
 
   Process {
     id: openProcess
+  }
+
+  Process {
+    id: libraryCheckProcess
+    command: [root.runner, "--list", "--json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.takeLibraryTotal(text)
+    }
   }
 
   Process {
@@ -438,14 +488,72 @@ Panel {
 
         Text {
           visible: !root.notInstalled && root.failure === "" && root.books.length === 0
+            && root.searching
           Layout.fillWidth: true
-          text: root.searching
-            ? "No book matches."
-            : "No book read yet. Fill the library with: omalibre --scan ~/Books"
+          text: "No book matches."
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap
+        }
+
+        // The library holds books, just none read yet: the fix is to open
+        // one, not to scan a directory that has already been scanned.
+        RowLayout {
+          visible: !root.notInstalled && root.failure === "" && root.books.length === 0
+            && !root.searching && root.libraryTotal > 0
+          Layout.fillWidth: true
+          spacing: Style.space(8)
+
+          Text {
+            Layout.fillWidth: true
+            text: (root.libraryTotal === 1 ? "1 book" : root.libraryTotal + " books")
+              + " in your library, none read yet."
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
+
+          Button {
+            text: "Library"
+            foreground: root.fg
+            tooltipText: "Open the whole library"
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY
+            onClicked: root.openLibrary()
+          }
+        }
+
+        // Nothing scanned in yet, or the check above has not answered: the
+        // same safe default the panel always showed here.
+        RowLayout {
+          visible: !root.notInstalled && root.failure === "" && root.books.length === 0
+            && !root.searching && root.libraryTotal <= 0
+          Layout.fillWidth: true
+          spacing: Style.space(8)
+
+          Text {
+            Layout.fillWidth: true
+            text: "No book read yet. Fill the library with: " + root.scanCommand
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
+
+          Button {
+            text: "Copy"
+            foreground: root.fg
+            tooltipText: "Copy the scan command"
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY
+            onClicked: root.copyScanCommand()
+          }
         }
 
         Repeater {
